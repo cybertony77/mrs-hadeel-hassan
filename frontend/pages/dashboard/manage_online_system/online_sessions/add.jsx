@@ -1,0 +1,726 @@
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/router";
+import Title from '../../../../components/Title';
+import AttendanceLessonSelect from '../../../../components/AttendancelessonSelect';
+import CourseSelect from '../../../../components/CourseSelect';
+import CourseTypeSelect from '../../../../components/CourseTypeSelect';
+import OnlineSessionPaymentStateSelect from '../../../../components/OnlineSessionPaymentStateSelect';
+import VideoInput from '../../../../components/VideoInput';
+import AccountStateSelect from '../../../../components/AccountStateSelect';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiClient from '../../../../lib/axios';
+import Image from 'next/image';
+
+// Extract YouTube video ID from URL
+function extractYouTubeId(url) {
+  const match = url.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([a-zA-Z0-9_-]{11})/
+  );
+  return match ? match[1] : null;
+}
+
+// Extract week number from week string (e.g., "week 01" -> 1)
+function extractWeekNumber(weekString) {
+  if (!weekString) return null;
+  const match = weekString.match(/week\s*(\d+)/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+export default function AddOnlineSession() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    videos: [{
+      video_name: '',
+      youtube_url: '',
+      video_source: 'youtube',
+      r2_key: '',
+      upload_file_name: '',
+      upload_progress: 0,
+      upload_status: 'idle',
+    }]
+  });
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [courseDropdownOpen, setCourseDropdownOpen] = useState(false);
+  const [selectedCourseType, setSelectedCourseType] = useState('');
+  const [courseTypeDropdownOpen, setCourseTypeDropdownOpen] = useState(false);
+  const [selectedLesson, setSelectedLesson] = useState('');
+  const [lessonDropdownOpen, setLessonDropdownOpen] = useState(false);
+  const [paymentState, setPaymentState] = useState('paid');
+  const [accountState, setAccountState] = useState('Activated');
+  const [errors, setErrors] = useState({});
+  const errorTimeoutRef = useRef(null);
+
+  // Fetch system config to check if R2 is enabled
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/system/config');
+      return response.data;
+    },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const showUploadTab = systemConfig?.cloudflare_r2 === true;
+
+  // Fetch all sessions for duplicate validation
+  const { data: sessionsData } = useQuery({
+    queryKey: ['online_sessions'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/online_sessions');
+      return response.data;
+    },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const sessions = sessionsData?.sessions || [];
+
+  // Auto-hide errors after 6 seconds
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      errorTimeoutRef.current = setTimeout(() => {
+        setErrors({});
+      }, 6000);
+    }
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, [errors]);
+
+  // Create session mutation
+  const createSessionMutation = useMutation({
+    mutationFn: async (data) => {
+      const response = await apiClient.post('/api/online_sessions', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['online_sessions']);
+      router.push('/dashboard/manage_online_system/online_sessions');
+    },
+    onError: (err) => {
+      const errorMsg = err.response?.data?.error || 'Failed to add session';
+      setErrors({ general: errorMsg.startsWith('❌') ? errorMsg : `❌ ${errorMsg}` });
+    },
+  });
+
+  // Add video row
+  const addVideo = () => {
+    setFormData(prev => ({
+      ...prev,
+      videos: [...prev.videos, {
+        video_name: '',
+        youtube_url: '',
+        video_source: 'youtube',
+        r2_key: '',
+        upload_file_name: '',
+        upload_progress: 0,
+        upload_status: 'idle',
+      }]
+    }));
+  };
+
+  // Remove video row
+  const removeVideo = (index) => {
+    setFormData(prev => {
+      if (prev.videos.length <= 1) return prev;
+      const newVideos = prev.videos.filter((_, i) => i !== index);
+      return { ...prev, videos: newVideos };
+    });
+    // Clear errors for removed video
+    const newErrors = { ...errors };
+    Object.keys(newErrors).forEach(key => {
+      if (key.startsWith(`video_${index}_`)) {
+        delete newErrors[key];
+      }
+    });
+    setErrors(newErrors);
+  };
+
+  // Handle video name change
+  const handleVideoNameChange = (index, name) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = { ...newVideos[index], video_name: name };
+      return { ...prev, videos: newVideos };
+    });
+  };
+
+  // Handle YouTube URL change
+  const handleYouTubeUrlChange = (index, url) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = {
+        ...newVideos[index],
+        youtube_url: url,
+        video_source: 'youtube',
+        r2_key: '',
+        upload_file_name: '',
+        upload_progress: 0,
+        upload_status: 'idle',
+      };
+      return { ...prev, videos: newVideos };
+    });
+    // Clear error
+    if (errors[`video_${index}_youtube_url`]) {
+      const newErrors = { ...errors };
+      delete newErrors[`video_${index}_youtube_url`];
+      setErrors(newErrors);
+    }
+  };
+
+  // Handle R2 upload complete
+  const handleR2Upload = (index, r2Key, fileName) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = {
+        ...newVideos[index],
+        r2_key: r2Key,
+        upload_file_name: fileName,
+        video_source: r2Key ? 'r2' : 'youtube',
+        ...(r2Key ? {
+          youtube_url: '',
+          upload_status: 'done',
+          upload_progress: 100,
+        } : {
+          upload_status: 'idle',
+          upload_progress: 0,
+        }),
+      };
+      return { ...prev, videos: newVideos };
+    });
+    if (errors[`video_${index}_upload`]) {
+      const newErrors = { ...errors };
+      delete newErrors[`video_${index}_upload`];
+      setErrors(newErrors);
+    }
+  };
+
+  // Handle form input change
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: '' });
+    }
+    if (errors.general) {
+      setErrors({ ...errors, general: '' });
+    }
+  };
+
+  // Handle form submit
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const newErrors = {};
+
+    // Validate course
+    if (!selectedCourse || selectedCourse.trim() === '') {
+      newErrors.course = '❌ Course is required';
+    }
+
+    // Validate lesson
+    if (!selectedLesson || selectedLesson.trim() === '') {
+      newErrors.lesson = '❌ Lesson is required';
+    }
+
+    // Validate payment state
+    if (!paymentState || (paymentState !== 'paid' && paymentState !== 'free')) {
+      newErrors.paymentState = '❌ Video Payment State is required';
+    }
+
+    // Validate name
+    if (!formData.name.trim()) {
+      newErrors.name = '❌ Name is required';
+    }
+
+    // Validate account state
+    if (!accountState || accountState.trim() === '') {
+      newErrors.accountState = '❌ Account State is required';
+    }
+
+    // Validate videos - at least one must have either youtube_url or r2_key
+    const validVideos = formData.videos.filter(video => {
+      return (video.youtube_url && video.youtube_url.trim()) || (video.r2_key && video.r2_key.trim());
+    });
+
+    if (validVideos.length === 0) {
+      newErrors.videos = '❌ At least one valid video is required';
+    }
+
+    // Validate each video
+    for (let index = 0; index < formData.videos.length; index++) {
+      const video = formData.videos[index];
+      const hasYoutube = video.youtube_url && video.youtube_url.trim();
+      const hasR2 = video.r2_key && video.r2_key.trim();
+
+      if (hasYoutube) {
+        const videoId = extractYouTubeId(video.youtube_url.trim());
+        if (!videoId) {
+          newErrors[`video_${index}_youtube_url`] = '❌ Invalid YouTube URL';
+        }
+      } else if (!hasR2 && validVideos.length === 0) {
+        newErrors[`video_${index}_youtube_url`] = '❌ YouTube URL is required';
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    // Check for duplicate course, courseType, and lesson combination
+    const duplicateSession = sessions.find(
+      session => {
+        const courseMatch = session.course === selectedCourse.trim();
+        const courseTypeMatch = (session.courseType || '').toLowerCase() === (selectedCourseType || '').toLowerCase();
+        const lessonMatch = session.lesson === selectedLesson.trim();
+        return courseMatch && courseTypeMatch && lessonMatch;
+      }
+    );
+    if (duplicateSession) {
+      newErrors.general = '❌ A session with this course, course type, and lesson already exists';
+      setErrors(newErrors);
+      return;
+    }
+
+    // Prepare video data for API
+    const finalVideoData = [];
+
+    for (let i = 0; i < formData.videos.length; i++) {
+      const video = formData.videos[i];
+      
+      if (video.r2_key && video.r2_key.trim()) {
+        finalVideoData.push({
+          video_type: 'r2',
+          video_id: video.r2_key.trim(),
+          video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null,
+        });
+      } else if (video.youtube_url && video.youtube_url.trim()) {
+        const videoId = extractYouTubeId(video.youtube_url.trim());
+        if (videoId) {
+          finalVideoData.push({
+            video_type: 'youtube',
+            video_id: videoId,
+            video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null,
+          });
+        }
+      }
+    }
+
+    // Prepare payload
+    const payload = {
+      name: formData.name.trim(),
+      course: selectedCourse.trim(),
+      courseType: selectedCourseType.trim() || null,
+      lesson: selectedLesson.trim(),
+      videos: finalVideoData,
+      description: formData.description.trim() || null,
+      payment_state: paymentState
+    };
+
+    if (accountState) {
+      payload.state = accountState;
+    }
+
+    // Submit form
+    createSessionMutation.mutate(payload);
+  };
+
+  return (
+    <div className="page-wrapper" style={{ 
+      minHeight: "100vh", 
+      padding: "20px 5px 20px 5px" 
+    }}>
+      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
+        <Title backText="Back" href="/dashboard/manage_online_system/online_sessions">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Image src="/plus.svg" alt="Add" width={32} height={32} />
+            Add Recorded Session
+          </div>
+        </Title>
+
+        <div className="form-container" style={{
+          background: 'white',
+          borderRadius: '16px',
+          padding: '24px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          marginTop: '24px'
+        }}>
+          <form onSubmit={handleSubmit}>
+            {/* Video Course */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+                Video Course <span style={{ color: 'red' }}>*</span>
+              </label>
+              <CourseSelect
+                selectedGrade={selectedCourse}
+                onGradeChange={(course) => {
+                  setSelectedCourse(course);
+                  if (errors.course) {
+                    setErrors({ ...errors, course: '' });
+                  }
+                }}
+                isOpen={courseDropdownOpen}
+                onToggle={() => setCourseDropdownOpen(!courseDropdownOpen)}
+                onClose={() => setCourseDropdownOpen(false)}
+                required={true}
+                showAllOption={true}
+              />
+              {errors.course && (
+                <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                  {errors.course}
+                </div>
+              )}
+            </div>
+
+            {/* Video Course Type */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+                Video Course Type
+              </label>
+              <CourseTypeSelect
+                selectedCourseType={selectedCourseType}
+                onCourseTypeChange={(courseType) => {
+                  setSelectedCourseType(courseType);
+                  if (errors.courseType) {
+                    setErrors({ ...errors, courseType: '' });
+                  }
+                }}
+                isOpen={courseTypeDropdownOpen}
+                onToggle={() => setCourseTypeDropdownOpen(!courseTypeDropdownOpen)}
+                onClose={() => setCourseTypeDropdownOpen(false)}
+              />
+              {errors.courseType && (
+                <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                  {errors.courseType}
+                </div>
+              )}
+            </div>
+
+            {/* Video Lesson */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+                Video Lesson <span style={{ color: 'red' }}>*</span>
+              </label>
+              <AttendanceLessonSelect
+                selectedLesson={selectedLesson}
+                onLessonChange={(lesson) => {
+                  setSelectedLesson(lesson);
+                  if (errors.lesson) {
+                    setErrors({ ...errors, lesson: '' });
+                  }
+                }}
+                isOpen={lessonDropdownOpen}
+                onToggle={() => setLessonDropdownOpen(!lessonDropdownOpen)}
+                onClose={() => setLessonDropdownOpen(false)}
+                required={true}
+                placeholder="Select Video Lesson"
+              />
+              {errors.lesson && (
+                <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                  {errors.lesson}
+                </div>
+              )}
+            </div>
+
+            {/* Video State */}
+            <AccountStateSelect
+              value={accountState}
+              onChange={setAccountState}
+              label="Video State"
+              placeholder="Select Video State"
+              required={true}
+              error={errors.accountState}
+            />
+            {errors.accountState && (
+              <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                {errors.accountState}
+              </div>
+            )}
+
+            {/* Video Payment State Radio */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '12px', fontWeight: '600', textAlign: 'left' }}>
+                Video Payment State <span style={{ color: 'red' }}>*</span>
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '10px', borderRadius: '8px', border: paymentState === 'paid' ? '2px solid #1FA8DC' : '2px solid #e9ecef', backgroundColor: paymentState === 'paid' ? '#f0f8ff' : 'white' }}>
+                  <input
+                    type="radio"
+                    name="payment_state"
+                    value="paid"
+                    checked={paymentState === 'paid'}
+                    onChange={(e) => {
+                      setPaymentState(e.target.value);
+                      if (errors.paymentState) {
+                        setErrors({ ...errors, paymentState: '' });
+                      }
+                    }}
+                    style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontWeight: '500' }}>Paid</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '10px', borderRadius: '8px', border: paymentState === 'free' ? '2px solid #1FA8DC' : '2px solid #e9ecef', backgroundColor: paymentState === 'free' ? '#f0f8ff' : 'white' }}>
+                  <input
+                    type="radio"
+                    name="payment_state"
+                    value="free"
+                    checked={paymentState === 'free'}
+                    onChange={(e) => {
+                      setPaymentState(e.target.value);
+                      if (errors.paymentState) {
+                        setErrors({ ...errors, paymentState: '' });
+                      }
+                    }}
+                    style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontWeight: '500' }}>Free</span>
+                </label>
+              </div>
+              {errors.paymentState && (
+                <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                  {errors.paymentState}
+                </div>
+              )}
+            </div>
+
+            {/* Name Input */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+                 Name <span style={{ color: 'red' }}>*</span>
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                placeholder="Enter Session Name"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: errors.name ? '2px solid #dc3545' : '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {errors.name && (
+                <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                  {errors.name}
+                </div>
+              )}
+            </div>
+
+            {/* Videos Section */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '12px', color: '#333', fontWeight: '500' }}>
+                Videos <span style={{ color: 'red' }}>*</span>
+              </label>
+              
+              {formData.videos.map((video, index) => (
+                <VideoInput
+                  key={index}
+                  index={index}
+                  video={video}
+                  onVideoNameChange={handleVideoNameChange}
+                  onYouTubeUrlChange={handleYouTubeUrlChange}
+                  onR2Upload={handleR2Upload}
+                  onRemove={removeVideo}
+                  canRemove={formData.videos.length > 1}
+                  errors={errors}
+                  showUploadTab={showUploadTab}
+                />
+              ))}
+
+              {/* Add Video Button */}
+              <button
+                type="button"
+                onClick={addVideo}
+                style={{
+                  marginTop: '16px',
+                  padding: '10px 20px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Image src="/plus.svg" alt="Add" width={20} height={20} style={{ display: 'inline-block' }} />
+                Add Another Video
+              </button>
+
+              {errors.videos && (
+                <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '8px' }}>
+                  {errors.videos}
+                </div>
+              )}
+            </div>
+
+            {/* Description Textarea */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+                Description
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                placeholder="Enter Description if you want..."
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* General Error */}
+            {errors.general && (
+              <div style={{
+                color: '#dc3545',
+                fontSize: '0.875rem',
+                marginBottom: '16px',
+                padding: '8px 12px',
+                backgroundColor: '#f8d7da',
+                borderRadius: '6px',
+                border: '1px solid #f5c6cb',
+                textAlign: 'center'
+              }}>
+                {errors.general}
+              </div>
+            )}
+
+            {/* Submit Buttons */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="submit"
+                disabled={createSessionMutation.isPending}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: createSessionMutation.isPending ? '#6c757d' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  cursor: createSessionMutation.isPending ? 'not-allowed' : 'pointer',
+                  opacity: createSessionMutation.isPending ? 0.6 : 1
+                }}
+              >
+                {createSessionMutation.isPending ? 'Creating...' : 'Create Session'}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard/manage_online_system/online_sessions')}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <style jsx>{`
+          
+          @media (max-width: 768px) {
+            .page-wrapper {
+              padding: 10px 5px 10px 5px !important;
+            }
+            
+            .page-content {
+              margin: 20px auto !important;
+              padding: 10px 5px 10px 5px !important;
+              max-width: 100% !important;
+            }
+            
+            .form-container {
+              padding: 16px !important;
+              margin-top: 16px !important;
+            }
+            
+            .form-container input[type="text"],
+            .form-container input[type="url"],
+            .form-container textarea {
+              font-size: 16px !important; /* Prevents zoom on iOS */
+            }
+            
+            .form-container button {
+              width: 100% !important;
+              margin-bottom: 8px !important;
+            }
+            
+            .form-container > form > div:last-child {
+              flex-direction: column !important;
+            }
+          }
+          
+          @media (max-width: 480px) {
+            .page-wrapper {
+              padding: 5px !important;
+            }
+            
+            .page-content {
+              margin: 10px auto !important;
+              padding: 5px !important;
+            }
+            
+            .form-container {
+              padding: 12px !important;
+              border-radius: 12px !important;
+            }
+            
+            .form-container label {
+              font-size: 0.9rem !important;
+            }
+            
+            .form-container input,
+            .form-container textarea {
+              font-size: 16px !important;
+              padding: 8px 10px !important;
+            }
+          }
+          
+          @media (max-width: 360px) {
+            .form-container {
+              padding: 10px !important;
+            }
+          }
+        `}</style>
+      </div>
+    </div>
+  );
+}
