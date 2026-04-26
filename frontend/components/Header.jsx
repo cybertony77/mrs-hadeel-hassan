@@ -10,7 +10,7 @@ export default function Header() {
   const { data: user } = useProfile();
   const { data: systemConfig } = useSystemConfig();
   const userRole = user?.role || '';
-  const systemName = systemConfig?.name || 'Dr. Ahmad Hassan';
+  const systemName = systemConfig?.name || 'American Diploma Academy';
   
   const handleLogoClick = () => {
     if (userRole === 'student') {

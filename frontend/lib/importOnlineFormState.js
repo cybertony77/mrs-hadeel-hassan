@@ -1,5 +1,8 @@
+import { newQuestionClientKey } from './onlineItemQuestionFormHelpers';
+
 function mapHomeworkQuestion(q) {
   return {
+    _clientKey: q._clientKey || newQuestionClientKey(),
     question_text: q.question_text || '',
     question_picture: q.question_picture || null,
     ...Object.keys(q || {})
@@ -25,6 +28,7 @@ export function buildHomeworkImportFormState(hw) {
       ? hw.questions.map(mapHomeworkQuestion)
       : [
           {
+            _clientKey: newQuestionClientKey(),
             question_text: '',
             question_picture: null,
             answers: ['A', 'B', 'C', 'D'],
@@ -65,6 +69,7 @@ export function buildHomeworkImportFormState(hw) {
 
 function mapQuizQuestion(q) {
   return {
+    _clientKey: q._clientKey || newQuestionClientKey(),
     question_text: q.question_text || '',
     question_picture: q.question_picture || null,
     ...Object.keys(q || {})
@@ -90,6 +95,7 @@ export function buildQuizImportFormState(quiz) {
       ? quiz.questions.map(mapQuizQuestion)
       : [
           {
+            _clientKey: newQuestionClientKey(),
             question_text: '',
             question_picture: null,
             answers: ['A', 'B'],
@@ -133,6 +139,7 @@ export function buildMockExamImportFormState(me) {
       ? me.questions.map(mapQuizQuestion)
       : [
           {
+            _clientKey: newQuestionClientKey(),
             question_text: '',
             question_picture: null,
             answers: ['A', 'B'],

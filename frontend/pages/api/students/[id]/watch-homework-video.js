@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const { session_id, action, payment_state, lesson } = req.body; // action: 'view' or 'finish', payment_state: 'free' or 'paid' or 'free_if_attended', lesson: lesson name
+    const { session_id, action, payment_state, lesson } = req.body; // action: 'view' or 'finish', payment_state: video state, lesson: lesson name
 
     if (!session_id) {
       return res.status(400).json({ error: 'Session ID is required' });
@@ -103,6 +103,8 @@ export default async function handler(req, res) {
     if (!session) {
       return res.status(404).json({ error: 'Homework video session not found' });
     }
+
+    const isPaidVideo = (payment_state || session.payment_state) === 'paid';
 
     if (action === 'view') {
       // Just record that video was opened (no decrement)
@@ -130,7 +132,8 @@ export default async function handler(req, res) {
                 [`lessons.${lessonName}.attended`]: true,
                 [`lessons.${lessonName}.lastAttendance`]: attendanceString,
                 [`lessons.${lessonName}.lastAttendanceCenter`]: 'Online',
-                [`lessons.${lessonName}.attendanceDate`]: attendanceDate
+                [`lessons.${lessonName}.attendanceDate`]: attendanceDate,
+                ...(isPaidVideo ? { [`lessons.${lessonName}.paid`]: true } : {})
               }
             }
           );
@@ -148,7 +151,7 @@ export default async function handler(req, res) {
             comment: null,
             message_state: false,
             homework_degree: null,
-            paid: false
+            paid: isPaidVideo
           };
           await db.collection('students').updateOne(
             { id: student_id },

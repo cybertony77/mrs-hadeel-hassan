@@ -331,6 +331,7 @@ export default function StudentDashboard() {
   const isOnlineVideosEnabled = systemConfig?.online_videos === true || systemConfig?.online_videos === 'true';
   const isHomeworksVideosEnabled = systemConfig?.homeworks_videos === true || systemConfig?.homeworks_videos === 'true';
   const isHomeworksEnabled = systemConfig?.homeworks === true || systemConfig?.homeworks === 'true';
+  const isMaterialEnabled = systemConfig?.material === true || systemConfig?.material === 'true';
   const isQuizzesEnabled = systemConfig?.quizzes === true || systemConfig?.quizzes === 'true';
   const isMockExamsEnabled = systemConfig?.mock_exams === true || systemConfig?.mock_exams === 'true';
   const isZoomJoinMeetingEnabled = systemConfig?.zoom_join_meeting === true || systemConfig?.zoom_join_meeting === 'true';
@@ -1176,6 +1177,16 @@ export default function StudentDashboard() {
                 >
                   <Image src="/play-pause.svg" alt="Play Pause" width={20} height={20} />
                   Homeworks Videos
+                </button>
+              )}
+
+              {isMaterialEnabled && (
+                <button
+                  className="dashboard-btn"
+                  onClick={() => router.push("/student_dashboard/my_material")}
+                >
+                  <Image src="/notes4.svg" alt="Material" width={20} height={20} />
+                  My Material
                 </button>
               )}
 

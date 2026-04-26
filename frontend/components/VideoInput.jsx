@@ -1,18 +1,34 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+import ZoomRecordingSelect from './ZoomRecordingSelect';
+import { useSystemConfig } from '../lib/api/system';
 
 export default function VideoInput({
   index,
   video,
   onVideoNameChange,
   onYouTubeUrlChange,
+  onZoomMeetingIdChange,
+  onClearYouTubeUrl,
+  onClearZoomMeetingId,
   onR2Upload,
+  onClearR2Upload,
+  onVideoSourceChange,
   onRemove,
   canRemove,
   errors,
   showUploadTab,
 }) {
-  const [activeTab, setActiveTab] = useState(video.video_source === 'r2' && showUploadTab ? 'upload' : 'youtube');
+  const { data: systemConfig } = useSystemConfig();
+  const showZoomTab =
+    systemConfig?.zoom_integrations === true || systemConfig?.zoom_integrations === 'true';
+
+  const initialTab = (() => {
+    if (video.video_source === 'r2' && showUploadTab) return 'upload';
+    if (video.video_source === 'zoom' && showZoomTab) return 'zoom';
+    return 'youtube';
+  })();
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [uploadProgress, setUploadProgress] = useState(video.upload_progress || 0);
   /** 'sending' = bytes leaving browser; 'finishing' = bytes sent, waiting for HTTP OK (R2 or server→R2) */
   const [uploadPhase, setUploadPhase] = useState('idle');
@@ -22,6 +38,16 @@ export default function VideoInput({
   const fileInputRef = useRef(null);
   const xhrRef = useRef(null);
 
+  // If Zoom integration is off but this video was saved as zoom, move off zoom tab and clear zoom fields
+  useEffect(() => {
+    if (systemConfig === undefined) return;
+    if (!showZoomTab && video.video_source === 'zoom') {
+      onVideoSourceChange(index, 'youtube');
+      onClearZoomMeetingId(index);
+      setActiveTab('youtube');
+    }
+  }, [systemConfig, showZoomTab, video.video_source, index, onVideoSourceChange, onClearZoomMeetingId]);
+
   // Sync activeTab when video data changes (e.g. edit page loads session data async)
   useEffect(() => {
     if (video.video_source === 'r2' && showUploadTab) {
@@ -29,22 +55,26 @@ export default function VideoInput({
       setUploadStatus(video.upload_status || (video.r2_key ? 'done' : 'idle'));
       setUploadProgress(video.upload_progress || (video.r2_key ? 100 : 0));
       setUploadFileName(video.upload_file_name || '');
+    } else if (video.video_source === 'zoom' && showZoomTab) {
+      setActiveTab('zoom');
     } else {
       setActiveTab('youtube');
     }
-  }, [video.video_source, video.r2_key, showUploadTab]);
+  }, [video.video_source, video.r2_key, showUploadTab, showZoomTab]);
 
   const handleTabSwitch = (tab) => {
     setActiveTab(tab);
+    onVideoSourceChange(index, tab === 'upload' ? 'r2' : tab === 'zoom' ? 'zoom' : 'youtube');
     // When switching tabs, clear the other tab's data
     if (tab === 'youtube') {
-      // If switching to youtube, clear R2 data
-      if (uploadStatus !== 'done') {
-        onR2Upload(index, '', '');
-      }
-    } else {
-      // If switching to upload, clear youtube data
-      onYouTubeUrlChange(index, '');
+      onClearR2Upload(index);
+      onClearZoomMeetingId(index);
+    } else if (tab === 'upload') {
+      onClearYouTubeUrl(index);
+      onClearZoomMeetingId(index);
+    } else if (tab === 'zoom') {
+      onClearYouTubeUrl(index);
+      onClearR2Upload(index);
     }
   };
 
@@ -209,7 +239,7 @@ export default function VideoInput({
       backgroundColor: '#f8f9fa'
     }}>
       {/* Header with Video number and Remove button */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+      <div className="video-input-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h4 style={{ margin: 0, color: '#333' }}>Video {index + 1}</h4>
         {canRemove && (
           <button
@@ -230,9 +260,9 @@ export default function VideoInput({
         )}
       </div>
 
-      {/* Tabs - only show if upload is enabled */}
-      {showUploadTab && (
-        <div style={{
+      {/* Tabs */}
+      {(
+        <div className="video-input-tabs" style={{
           display: 'flex',
           borderBottom: '1px solid #e9ecef',
           marginBottom: '16px',
@@ -245,13 +275,24 @@ export default function VideoInput({
           >
             YouTube
           </button>
-          <button
-            type="button"
-            onClick={() => handleTabSwitch('upload')}
-            style={tabStyle(activeTab === 'upload')}
-          >
-            Upload
-          </button>
+          {showUploadTab && (
+            <button
+              type="button"
+              onClick={() => handleTabSwitch('upload')}
+              style={tabStyle(activeTab === 'upload')}
+            >
+              Upload
+            </button>
+          )}
+          {showZoomTab && (
+            <button
+              type="button"
+              onClick={() => handleTabSwitch('zoom')}
+              style={tabStyle(activeTab === 'zoom')}
+            >
+              Zoom
+            </button>
+          )}
         </div>
       )}
 
@@ -481,6 +522,65 @@ export default function VideoInput({
           )}
         </div>
       )}
+
+      {/* Zoom Tab Content */}
+      {showZoomTab && activeTab === 'zoom' && (
+        <div className="zoom-tab-content" style={{ marginBottom: '0' }}>
+          <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+            Zoom Meeting ID (or UUID) <span style={{ color: 'red' }}>*</span>
+          </label>
+          <input
+            type="text"
+            value={video.zoom_meeting_id || ''}
+            onChange={(e) => onZoomMeetingIdChange(index, e.target.value)}
+            placeholder="Enter Zoom Meeting ID"
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              border: errors[`video_${index}_zoom_meeting_id`] ? '2px solid #dc3545' : '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }}
+          />
+          {errors[`video_${index}_zoom_meeting_id`] && (
+            <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+              {errors[`video_${index}_zoom_meeting_id`]}
+            </div>
+          )}
+
+          <ZoomRecordingSelect
+            selectedValue={video.zoom_meeting_id || ''}
+            onSelect={(value) => onZoomMeetingIdChange(index, value)}
+          />
+        </div>
+      )}
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .video-input-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 10px;
+          }
+          .video-input-tabs {
+            flex-wrap: wrap;
+            gap: 6px !important;
+          }
+          .video-input-tabs button {
+            min-width: 100px;
+            flex: 1 1 calc(50% - 6px);
+          }
+          .zoom-tab-content {
+            margin-top: 4px;
+          }
+        }
+        @media (max-width: 480px) {
+          .video-input-tabs button {
+            flex: 1 1 100%;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -96,7 +96,7 @@ export default function ChartTabs({
 
   return (
     <div style={{ marginTop: 24 }}>
-      <div style={{ display: 'flex', gap: 0, marginBottom: 12 }}>
+      <div className="chart-tabs-buttons" style={{ display: 'flex', gap: 0, marginBottom: 12 }}>
         <button
           onClick={() => setActive('hw')}
           style={{
@@ -147,7 +147,7 @@ export default function ChartTabs({
         </button>
       </div>
 
-      <div style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 12, padding: 20 }}>
+      <div className="chart-tabs-body" style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 12, padding: 20 }}>
         {active === 'hw' ? (
           <HwChart
             lessons={normalizedLessons}
@@ -164,6 +164,32 @@ export default function ChartTabs({
           <MockExamChart mockExams={normalizedMockExams} />
         )}
       </div>
+      <style jsx>{`
+        @media (max-width: 900px) {
+          .chart-tabs-buttons {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 0 !important;
+          }
+          .chart-tabs-buttons button {
+            width: auto !important;
+            flex: 1 !important;
+            border-radius: 0 !important;
+            font-size: 0.84rem !important;
+            padding: 10px 8px !important;
+            white-space: nowrap !important;
+          }
+          .chart-tabs-buttons button:first-child {
+            border-radius: 8px 0 0 0 !important;
+          }
+          .chart-tabs-buttons button:last-child {
+            border-radius: 0 8px 8px 0 !important;
+          }
+          .chart-tabs-body {
+            padding: 12px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

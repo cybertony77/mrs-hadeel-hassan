@@ -61,21 +61,25 @@ export default function MockExamChart({ mockExams }) {
     outOf: exam.outOf,
     result: exam.result || null
   }));
+  const minChartWidth = Math.max(chartData.length * 70, 320);
 
   return (
-    <div ref={chartRef} style={{ width: '100%', height: 500 }}>
-      <ResponsiveContainer>
-        <BarChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 50 }}>
+    <div ref={chartRef} style={{ width: '100%', overflowX: 'auto' }}>
+      <div style={{ width: '100%', minWidth: `${minChartWidth}px`, height: 500 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} margin={{ top: 20, right: 20, left: 20, bottom: 95 }} barCategoryGap="12%" barGap={2}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
           <XAxis 
             dataKey="exam" 
             stroke="#6c757d"
             fontSize={12}
-            tick={{ fill: '#495057' }}
+            tick={{ fill: '#495057', fontSize: 13 }}
             interval={0} 
-            angle={-20} 
+            angle={-35} 
             textAnchor="end" 
-            height={50}
+            height={95}
+            minTickGap={24}
+            tickMargin={14}
           />
           <YAxis 
             stroke="#6c757d"
@@ -129,6 +133,7 @@ export default function MockExamChart({ mockExams }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }

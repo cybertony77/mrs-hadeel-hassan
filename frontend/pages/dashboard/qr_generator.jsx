@@ -537,7 +537,7 @@ export default function QRGenerator() {
                 <div className="qr-container">
                   <QRCode
                     id="single-qr-svg"
-                    value={`https://www.facebook.com/share/1AShaU7c3t/?id=${singleId}`}
+                    value={`https://wa.me/201023345469/?id=${singleId}`}
                     size={qrSize}
                     ecLevel="H"
                     logoImage="/logo.png"
@@ -619,7 +619,7 @@ export default function QRGenerator() {
               <div className="qr-container" key={id}>
                 <QRCode
                   id={`hidden-qr-${id}`}
-                  value={`https://www.facebook.com/share/1AShaU7c3t/?id=${id}`}
+                  value={`https://wa.me/201023345469//?id=${id}`}
                   size={qrSize}
                   ecLevel="H"
                   logoImage="/logo.png"

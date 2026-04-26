@@ -15,6 +15,12 @@ import { formatHomeworkPickerLabel } from '../../../../lib/importOnlineItemLabel
 import { buildHomeworkImportFormState } from '../../../../lib/importOnlineFormState';
 import { fetchImportedQuestionImageUrls } from '../../../../lib/fetchImportedQuestionImageUrls';
 import { centersMatchDuplicateClient } from '../../../../lib/onlineItemDuplicate';
+import {
+  newQuestionClientKey,
+  reindexCompositeKeysAfterQuestionRemoved,
+  reindexQuestionErrorsAfterQuestionRemoved,
+  reindexDragOverAfterQuestionRemoved,
+} from '../../../../lib/onlineItemQuestionFormHelpers';
 
 
 export default function EditHomework() {
@@ -37,6 +43,7 @@ export default function EditHomework() {
     pdf_file_name: '',
     pdf_url: '',
     questions: [{
+      _clientKey: newQuestionClientKey(),
       question_text: '',
       question_picture: null,
       answers: ['A', 'B'],
@@ -206,6 +213,7 @@ export default function EditHomework() {
         pdf_url: homeworkData.pdf_url || '',
         questions: homeworkType === 'questions' && homeworkData.questions && Array.isArray(homeworkData.questions)
           ? homeworkData.questions.map(q => ({
+              _clientKey: q._id ? String(q._id) : newQuestionClientKey(),
               question_text: q.question_text || '',
               question_picture: q.question_picture || null,
               ...Object.keys(q)
@@ -217,6 +225,7 @@ export default function EditHomework() {
               question_explanation: q.question_explanation || ''
             }))
           : [{
+              _clientKey: newQuestionClientKey(),
               question_text: '',
               question_picture: null,
               answers: ['A', 'B'],
@@ -692,6 +701,7 @@ export default function EditHomework() {
     setFormData(prev => ({
       ...prev,
       questions: [...prev.questions, {
+        _clientKey: newQuestionClientKey(),
         question_text: '',
         question_picture: null,
         answers: ['A', 'B'],
@@ -703,25 +713,23 @@ export default function EditHomework() {
   };
 
   const removeQuestion = (questionIndex) => {
+    const i = Number(questionIndex);
+    if (Number.isNaN(i) || i < 0) return;
     if (!formData.questions || formData.questions.length === 1) {
       setErrors({ general: '❌ At least one question is required' });
       return;
     }
-    
+
     setFormData(prev => ({
       ...prev,
-      questions: prev.questions.filter((_, idx) => idx !== questionIndex)
+      questions: prev.questions.filter((_, idx) => idx !== i)
     }));
-    setImagePreviews(prev => {
-      const newPreviews = { ...prev };
-      delete newPreviews[questionIndex];
-      return newPreviews;
-    });
-    setImageUrls(prev => {
-      const newUrls = { ...prev };
-      delete newUrls[questionIndex];
-      return newUrls;
-    });
+    setImagePreviews(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setImageUrls(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setUploadingImages(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setLoadingImages(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setErrors(prev => reindexQuestionErrorsAfterQuestionRemoved(prev, i));
+    setDragOverIndex((d) => reindexDragOverAfterQuestionRemoved(d, i));
   };
 
   const handleSubmit = (e) => {
@@ -897,7 +905,7 @@ export default function EditHomework() {
       submitData.to_page = parseInt(formData.to_page);
     } else if (formData.homework_type === 'questions') {
       if (formData.questions && Array.isArray(formData.questions)) {
-        submitData.questions = formData.questions.map(q => ({
+        submitData.questions = formData.questions.map(({ _clientKey, ...q }) => ({
           question_text: q.question_text || '',
           ...buildQuestionPicturesPayload(getQuestionPictures(q)),
           answers: q.answers,
@@ -1262,6 +1270,7 @@ export default function EditHomework() {
                       ...formData, 
                       homework_type: 'pages_from_book',
                       questions: [{
+                        _clientKey: newQuestionClientKey(),
                         question_text: '',
                         question_picture: null,
                         answers: ['A', 'B'],
@@ -1296,6 +1305,7 @@ export default function EditHomework() {
                       ...formData, 
                       homework_type: 'pdf',
                       questions: [{
+                        _clientKey: newQuestionClientKey(),
                         question_text: '',
                         question_picture: null,
                         answers: ['A', 'B'],
@@ -1756,7 +1766,7 @@ export default function EditHomework() {
                 {activeTab === 'questions' && formData.questions && Array.isArray(formData.questions) && (
               <>
                 {formData.questions.map((question, qIdx) => (
-              <div key={qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
+              <div key={question._clientKey || qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '1.1rem', textAlign: 'left' }}>
                     Question {qIdx + 1}
@@ -1764,7 +1774,13 @@ export default function EditHomework() {
                   {formData.questions && formData.questions.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeQuestion(qIdx)}
+                      data-q-index={qIdx}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const raw = e.currentTarget.getAttribute('data-q-index');
+                        removeQuestion(raw != null && raw !== '' ? Number(raw) : qIdx);
+                      }}
                       style={{
                         padding: '6px 12px',
                         backgroundColor: '#dc3545',

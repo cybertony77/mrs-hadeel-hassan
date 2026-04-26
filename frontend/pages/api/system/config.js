@@ -42,10 +42,12 @@ export default async function handler(req, res) {
     const onlineVideos = envConfig.SYSTEM_ONLINE_VIDEOS === 'true' || process.env.SYSTEM_ONLINE_VIDEOS === 'true';
     const homeworksVideos = envConfig.SYSTEM_HOMEWORKS_VIDEOS === 'true' || process.env.SYSTEM_HOMEWORKS_VIDEOS === 'true';
     const homeworks = envConfig.SYSTEM_HOMEWORKS === 'true' || process.env.SYSTEM_HOMEWORKS === 'true';
+    const material = envConfig.SYSTEM_MATERIAL === 'true' || process.env.SYSTEM_MATERIAL === 'true';
     const quizzes = envConfig.SYSTEM_QUIZZES === 'true' || process.env.SYSTEM_QUIZZES === 'true';
     const mockExams = envConfig.SYSTEM_MOCK_EXAMS === 'true' || process.env.SYSTEM_MOCK_EXAMS === 'true';
     const cloudflareR2 = envConfig.SYSTEM_CLOUDFLARE_R2 === 'true' || process.env.SYSTEM_CLOUDFLARE_R2 === 'true';
     const zoomJoinMeeting = envConfig.SYSTEM_ZOOM_JOIN_MEETING === 'true' || process.env.SYSTEM_ZOOM_JOIN_MEETING === 'true';
+    const zoomIntegrations = envConfig.SYSTEM_ZOOM_INTEGRATIONS === 'true' || process.env.SYSTEM_ZOOM_INTEGRATIONS === 'true';
     const paymentSystem = envConfig.SYSTEM_PAYMENT_SYSTEM === 'true' || process.env.SYSTEM_PAYMENT_SYSTEM === 'true';
     const subscription = envConfig.SYSTEM_SUBSCRIPTION === 'true' || process.env.SYSTEM_SUBSCRIPTION === 'true';
     const deviceLimitations = envConfig.SYSTEM_DEVICE_LIMITATIONS === 'true' || process.env.SYSTEM_DEVICE_LIMITATIONS === 'true';
@@ -58,10 +60,12 @@ export default async function handler(req, res) {
       online_videos: onlineVideos,
       homeworks_videos: homeworksVideos,
       homeworks: homeworks,
+      material: material,
       quizzes: quizzes,
       mock_exams: mockExams,
       cloudflare_r2: cloudflareR2,
       zoom_join_meeting: zoomJoinMeeting,
+      zoom_integrations: zoomIntegrations,
       payment_system: paymentSystem,
       subscription: subscription,
       device_limitations: deviceLimitations

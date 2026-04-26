@@ -11,6 +11,7 @@ import StudentLessonSelect from '../../components/StudentLessonSelect';
 import NeedHelp from '../../components/NeedHelp';
 import R2VideoPlayer from '../../components/R2VideoPlayer';
 import YoutubeEmbedWithProgress from '../../components/YoutubeEmbedWithProgress';
+import ZoomVideoPlayer from '../../components/ZoomVideoPlayer';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 
@@ -65,6 +66,7 @@ export default function HomeworksVideos() {
   const videoStartTimeRef = useRef(null); // Track when video was opened
   const isClosingVideoRef = useRef(false); // Prevent multiple close calls
   const r2CompletedRef = useRef(false); // R2: >= 90% watched
+  const watchedTenPercentRef = useRef(false); // Attendance/watch marker at >=10%
   const selectedVideoRef = useRef(null);
   const vhcViewsDecrementDoneRef = useRef(false);
   const [vhcPopupOpen, setVhcPopupOpen] = useState(false);
@@ -308,6 +310,7 @@ export default function HomeworksVideos() {
   useEffect(() => {
     if (videoPopupOpen) {
       vhcViewsDecrementDoneRef.current = false;
+      watchedTenPercentRef.current = false;
     }
   }, [videoPopupOpen, selectedVideo?._id]);
 
@@ -378,6 +381,11 @@ export default function HomeworksVideos() {
     }
   }, []);
 
+  const handleWatchTenPercentHomework = useCallback(async () => {
+    watchedTenPercentRef.current = true;
+    await tryDecrementVhcViewsOnWatchProgress();
+  }, [tryDecrementVhcViewsOnWatchProgress]);
+
   const handleR2VideoCompleteHomework = useCallback(() => {
     r2CompletedRef.current = true;
   }, []);
@@ -425,6 +433,7 @@ export default function HomeworksVideos() {
       setVideoPopupOpen(true);
       videoStartTimeRef.current = Date.now();
       r2CompletedRef.current = false;
+      watchedTenPercentRef.current = false;
     } else {
       // Video is locked - require VHC
       setPendingVideo({ session, videoId, videoIndex, videoType });
@@ -489,6 +498,7 @@ export default function HomeworksVideos() {
         setVideoPopupOpen(true);
         videoStartTimeRef.current = Date.now();
         r2CompletedRef.current = false;
+        watchedTenPercentRef.current = false;
         setPendingVideo(null);
         setVhc('');
       } else {
@@ -516,20 +526,14 @@ export default function HomeworksVideos() {
       return;
     }
     
-    // YouTube: at least 5 seconds; R2: >= 90% (completion callback)
-    const minWatchTime = 5000; // 5 seconds in milliseconds
-    const watchTime = videoStartTimeRef.current ? Date.now() - videoStartTimeRef.current : 0;
-    
     // Close popup immediately (UI feedback)
     const currentVideo = selectedVideo;
-    const isR2Video = currentVideo?.video_type === 'r2';
-    const r2Completed = r2CompletedRef.current;
     setVideoPopupOpen(false);
     setSelectedVideo(null);
     videoStartTimeRef.current = null;
     r2CompletedRef.current = false;
-    
-    const videoWasWatched = isR2Video ? r2Completed : (watchTime >= minWatchTime);
+    const videoWasWatched = watchedTenPercentRef.current;
+    watchedTenPercentRef.current = false;
     
     // Call watch-homework-video API to set view_homework_video=true and mark attendance
     if (currentVideo && profile?.id && currentVideo._id && videoWasWatched) {
@@ -1060,36 +1064,27 @@ export default function HomeworksVideos() {
                     videoId={selectedVideo._id}
                     watermarkText={`${profile?.id || 'unknown'}`}
                     onComplete={handleR2VideoCompleteHomework}
-                    onMilestonePercent={
-                      selectedVideo.code_settings === 'number_of_views' && selectedVideo.vhc_id
-                        ? tryDecrementVhcViewsOnWatchProgress
-                        : undefined
-                    }
+                    onMilestonePercent={handleWatchTenPercentHomework}
+                  />
+                ) : selectedVideo.video_type === 'zoom' ? (
+                  <ZoomVideoPlayer
+                    meetingId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                    videoId={selectedVideo._id}
+                    watermarkText={`${profile?.id || 'unknown'}`}
+                    onComplete={handleR2VideoCompleteHomework}
+                    onMilestonePercent={handleWatchTenPercentHomework}
                   />
                 ) : selectedVideo.code_settings === 'number_of_views' && selectedVideo.vhc_id ? (
                   <YoutubeEmbedWithProgress
                     youtubeVideoId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
-                    onThresholdReached={tryDecrementVhcViewsOnWatchProgress}
+                    watermarkText={`${profile?.id || 'unknown'}`}
+                    onThresholdReached={handleWatchTenPercentHomework}
                   />
                 ) : (
-                  <iframe
-                    src={buildEmbedUrl(selectedVideo.video_ID || selectedVideo.video_ID_1 || '')}
-                    frameBorder="0"
-                    allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
-                    allowFullScreen={true}
-                    playsInline={true}
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      maxHeight: '100vh',
-                      aspectRatio: '16 / 9',
-                      border: 'none',
-                      outline: 'none'
-                    }}
-                    onContextMenu={(e) => e.preventDefault()}
-                    onDragStart={(e) => e.preventDefault()}
-                    onSelectStart={(e) => e.preventDefault()}
-                    draggable={false}
+                  <YoutubeEmbedWithProgress
+                    youtubeVideoId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                    watermarkText={`${profile?.id || 'unknown'}`}
+                    onThresholdReached={handleWatchTenPercentHomework}
                   />
                 )}
               </div>

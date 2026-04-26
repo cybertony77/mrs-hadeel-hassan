@@ -8,6 +8,8 @@ import CourseTypeSelect from '../../../../components/CourseTypeSelect';
 import HomeworkVideoPaymentStateSelect from '../../../../components/HomeworkVideoPaymentStateSelect';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
 import R2VideoPlayer from '../../../../components/R2VideoPlayer';
+import ZoomVideoPlayer from '../../../../components/ZoomVideoPlayer';
+import YoutubeEmbedWithProgress from '../../../../components/YoutubeEmbedWithProgress';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import { useProfile } from '../../../../lib/api/auth';
@@ -1039,25 +1041,15 @@ export default function HomeworksVideos() {
                   r2Key={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
                   watermarkText={`${profile?.id || 'unknown'}`}
                 />
+              ) : selectedVideo.video_type === 'zoom' ? (
+                <ZoomVideoPlayer
+                  meetingId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                  watermarkText={`${profile?.id || 'unknown'}`}
+                />
               ) : (
-                <iframe
-                  src={buildEmbedUrl(selectedVideo.video_ID || selectedVideo.video_ID_1 || '')}
-                  frameBorder="0"
-                  allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
-                  allowFullScreen={true}
-                  playsInline={true}
-                  style={{
-                    width: '100%',
-                    height: 'auto',
-                    maxHeight: '100vh',
-                    aspectRatio: '16 / 9',
-                    border: 'none',
-                    outline: 'none'
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onDragStart={(e) => e.preventDefault()}
-                  onSelectStart={(e) => e.preventDefault()}
-                  draggable={false}
+                <YoutubeEmbedWithProgress
+                  youtubeVideoId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                  watermarkText={`${profile?.id || 'unknown'}`}
                 />
               )}
             </div>

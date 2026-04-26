@@ -1,4 +1,5 @@
 import { useEffect, useRef, useId } from "react";
+import VideoWatermarkOverlay from "./VideoWatermarkOverlay";
 
 /**
  * YouTube embed using IFrame API so we can detect when the user has watched
@@ -8,6 +9,7 @@ export default function YoutubeEmbedWithProgress({
   youtubeVideoId,
   onThresholdReached,
   thresholdFraction = 0.1,
+  watermarkText,
   style,
   className,
 }) {
@@ -108,15 +110,24 @@ export default function YoutubeEmbedWithProgress({
 
   return (
     <div
-      id={playerDivId}
       className={className}
       style={{
         width: "100%",
         aspectRatio: "16 / 9",
         maxHeight: "100vh",
         backgroundColor: "#000",
+        position: "relative",
         ...style,
       }}
-    />
+    >
+      <div
+        id={playerDivId}
+        style={{
+          width: "100%",
+          height: "100%",
+        }}
+      />
+      <VideoWatermarkOverlay text={watermarkText} />
+    </div>
   );
 }

@@ -5,6 +5,8 @@ import http from 'http';
 import https from 'https';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
+import { getZoomAccessToken, getZoomMeetingMp4DownloadUrl } from '../../../lib/zoomServer';
+import { Readable } from 'stream';
 
 // Disable Next.js body parsing — we stream raw bytes
 export const config = {
@@ -104,18 +106,152 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // ── Build key from catch-all segments ────────────────────────────────────
+  const { key } = req.query; // key is an array of path segments
+  if (!key || key.length === 0) {
+    return res.status(400).json({ error: 'Video key is required' });
+  }
+  const routeParts = Array.isArray(key) ? key : [key];
+
+  const isZoomByPrefix = routeParts[0] === 'zoom';
+  const isZoomByMeetingIdRoute = routeParts.length === 1 && /^[0-9]+$/.test(String(routeParts[0]));
+
+  // Zoom routes:
+  // - /api/videos/{meetingId}
+  // - /api/videos/zoom/{meetingId}
+  if (isZoomByPrefix || isZoomByMeetingIdRoute) {
+    const meetingId = isZoomByPrefix ? routeParts.slice(1).join('/') : routeParts[0];
+    if (!meetingId) {
+      return res.status(400).json({ error: 'Zoom meeting ID is required' });
+    }
+
+    try {
+      let recordingInfo;
+      try {
+        recordingInfo = await getZoomMeetingMp4DownloadUrl(meetingId);
+      } catch (err) {
+        if (err?.statusCode === 401) {
+          recordingInfo = await getZoomMeetingMp4DownloadUrl(meetingId, true);
+        } else {
+          throw err;
+        }
+      }
+
+      let token;
+      try {
+        token = await getZoomAccessToken();
+      } catch {
+        token = await getZoomAccessToken(true);
+      }
+
+      const upstreamHeaders = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (req.headers.range) {
+        upstreamHeaders.Range = req.headers.range;
+      }
+
+      let zoomVideoResponse = await fetch(recordingInfo.downloadUrl, {
+        method: req.method,
+        headers: upstreamHeaders,
+      });
+
+      if (zoomVideoResponse.status === 401) {
+        const freshToken = await getZoomAccessToken(true);
+        const retryHeaders = {
+          Authorization: `Bearer ${freshToken}`,
+        };
+        if (req.headers.range) {
+          retryHeaders.Range = req.headers.range;
+        }
+        zoomVideoResponse = await fetch(recordingInfo.downloadUrl, {
+          method: req.method,
+          headers: retryHeaders,
+        });
+      }
+
+      if (!zoomVideoResponse.ok) {
+        if (zoomVideoResponse.status === 404) {
+          return res.status(404).json({ error: 'No recording found for this meeting' });
+        }
+        if (zoomVideoResponse.status === 401) {
+          return res.status(401).json({ error: 'Zoom token expired' });
+        }
+        return res.status(502).json({ error: 'Zoom video streaming failed' });
+      }
+
+      const headersToForward = [
+        'content-range',
+        'accept-ranges',
+        'content-length',
+        'last-modified',
+        'etag',
+      ];
+      headersToForward.forEach((header) => {
+        const value = zoomVideoResponse.headers.get(header);
+        if (value) res.setHeader(header, value);
+      });
+
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.statusCode = zoomVideoResponse.status;
+
+      if (req.method === 'HEAD') {
+        return res.end();
+      }
+
+      if (!zoomVideoResponse.body) {
+        return res.status(502).json({ error: 'Zoom API returned empty stream' });
+      }
+
+      const stream = Readable.fromWeb(zoomVideoResponse.body);
+      const cleanup = () => {
+        try {
+          if (stream && typeof stream.destroy === 'function') stream.destroy();
+        } catch (_) {}
+      };
+
+      req.on('close', cleanup);
+      req.on('aborted', cleanup);
+      stream.on('end', cleanup);
+      stream.on('close', cleanup);
+      stream.on('error', () => {
+        cleanup();
+        if (!res.headersSent) {
+          res.status(502).end();
+        } else {
+          res.end();
+        }
+      });
+      stream.pipe(res);
+      return;
+    } catch (error) {
+      const statusCode = error?.statusCode || 500;
+      if (statusCode === 404) {
+        return res.status(404).json({ error: 'No recording found for this meeting' });
+      }
+      if (statusCode === 401) {
+        return res.status(401).json({ error: 'Zoom token expired' });
+      }
+      if (statusCode === 400) {
+        return res.status(400).json({ error: error.message || 'Invalid meeting ID' });
+      }
+      return res.status(502).json({
+        error: 'Zoom API failure',
+        details: error?.message || 'Failed to stream Zoom recording',
+      });
+    }
+  }
+
   // ── R2 config check ──────────────────────────────────────────────────────
   if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
     return res.status(500).json({ error: 'R2 configuration is missing' });
   }
 
-  // ── Build the R2 object key from the catch-all segments ──────────────────
-  // URL: /api/videos/videos/1234_abc_file.mp4  →  key = "videos/1234_abc_file.mp4"
-  const { key } = req.query; // key is an array of path segments
-  if (!key || key.length === 0) {
-    return res.status(400).json({ error: 'Video key is required' });
-  }
-  const objectKey = key.join('/');
+  // R2 route: /api/videos/videos/1234_abc_file.mp4 => key = "videos/1234_abc_file.mp4"
+  const objectKey = routeParts.join('/');
   console.log('Streaming:', objectKey);
 
   try {

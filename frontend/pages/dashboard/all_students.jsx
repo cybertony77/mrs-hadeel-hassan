@@ -401,6 +401,7 @@ export default function AllStudents() {
             showAccountStatus={true}
             showScore={isScoringEnabled}
             showPayment={isPaymentSystemEnabled}
+            showOppositeTotals={true}
             showGender={true}
             showComment={false}
             showMainComment={false}

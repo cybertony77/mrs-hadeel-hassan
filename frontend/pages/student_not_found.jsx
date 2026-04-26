@@ -10,7 +10,7 @@ export default function StudentNotFound() {
   return (
     <div style={{ 
       minHeight: "100vh",
-      background: 'linear-gradient(330deg, rgb(161, 30, 30) 0%, rgb(223, 106, 71) 50%, rgba(212, 147, 63, 1) 100%)',
+      background: 'linear-gradient(150deg,rgba(247, 162, 77, 1) 0%, rgba(217, 152, 82, 1) 50%, rgba(217, 152, 82, 1) 100%)',
       display: "flex",
       flexDirection: "column",
       alignItems: "center",

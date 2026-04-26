@@ -72,10 +72,24 @@ export default function HwChart({ lessons, chartData, chartLoading }) {
     if (chartLoading) {
       return [];
     }
+    const lessonsFallback = Array.isArray(lessons)
+      ? lessons
+          .map((l) => {
+            const degree = parseDegreeToNumber(l.homework_degree ?? l.homeworkDegree);
+            return degree == null
+              ? null
+              : {
+                  name: l.lesson,
+                  degree,
+                  originalDegree: l.homework_degree ?? l.homeworkDegree
+                };
+          })
+          .filter(Boolean)
+      : [];
     // API-driven chart (center/course filtered on server) — includes empty array; do not fall back to raw lessons
     if (chartData !== undefined && chartData !== null) {
       if (!Array.isArray(chartData) || chartData.length === 0) {
-        return [];
+        return lessonsFallback;
       }
       return chartData
         .map((item) => {
@@ -91,18 +105,9 @@ export default function HwChart({ lessons, chartData, chartLoading }) {
     }
 
     // Legacy: lessons prop only when chartData not supplied
-    if (!lessons) return [];
-    return lessons
-      .map((l) => {
-        const degree = parseDegreeToNumber(l.homework_degree ?? l.homeworkDegree);
-        return degree == null ? null : { 
-          name: l.lesson, 
-          degree,
-          originalDegree: l.homework_degree ?? l.homeworkDegree
-        };
-      })
-      .filter(Boolean);
+    return lessonsFallback;
   }, [lessons, chartData, chartLoading]);
+  const minChartWidth = Math.max(data.length * 70, 320);
 
   if (chartLoading) {
     return (
@@ -139,11 +144,12 @@ export default function HwChart({ lessons, chartData, chartLoading }) {
   }
 
   return (
-    <div ref={chartRef} style={{ width: '100%', height: 500 }}>
-      <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 20, right: 10, left: 10, bottom: 50 }}>
+    <div ref={chartRef} style={{ width: '100%', overflowX: 'auto' }}>
+      <div style={{ width: '100%', minWidth: `${minChartWidth}px`, height: 500 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 95 }} barCategoryGap="12%" barGap={2}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
-          <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={50} tick={{ fill: '#495057', fontSize: 14 }} />
+          <XAxis dataKey="name" interval={0} angle={-35} textAnchor="end" height={95} minTickGap={24} tickMargin={14} tick={{ fill: '#495057', fontSize: 13 }} />
           <YAxis 
             domain={[0, 100]} 
             tick={{ fill: '#495057', fontSize: 14 }}
@@ -191,6 +197,7 @@ export default function HwChart({ lessons, chartData, chartLoading }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }

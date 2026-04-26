@@ -42,6 +42,17 @@ function extractYouTubeId(url) {
   return match ? match[1] : null;
 }
 
+function extractZoomMeetingId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const noSpaces = raw.replace(/\s+/g, '');
+  if (/^[0-9]+$/.test(noSpaces)) return noSpaces;
+  const match = noSpaces.match(/zoom\.us\/(?:j|wc\/j(?:oin)?)\/([0-9]+)/i);
+  if (match?.[1]) return match[1];
+  // UUID value coming from recordings list selection
+  return noSpaces;
+}
+
 // Format date as MM/DD/YYYY at hour:minute AM/PM
 function formatDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -134,8 +145,18 @@ export default async function handler(req, res) {
               if (video.video_name && video.video_name.trim()) {
                 videoData[`video_name_${index + 1}`] = video.video_name.trim();
               }
+            } else if (video.video_type === 'zoom') {
+              const zoomMeetingId = extractZoomMeetingId(video.video_id);
+              if (!zoomMeetingId) {
+                return res.status(400).json({ error: `Invalid Zoom meeting ID at position ${index + 1}` });
+              }
+              videoData[`video_ID_${index + 1}`] = zoomMeetingId;
+              videoData[`video_type_${index + 1}`] = 'zoom';
+              if (video.video_name && video.video_name.trim()) {
+                videoData[`video_name_${index + 1}`] = video.video_name.trim();
+              }
             } else {
-              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Supported types: youtube, r2.` });
+              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Supported types: youtube, r2, zoom.` });
             }
           } else if (video && video.video_id) {
             // If no video_type specified, assume YouTube and extract ID from URL if needed
@@ -252,8 +273,18 @@ export default async function handler(req, res) {
               if (video.video_name && video.video_name.trim()) {
                 videoData[`video_name_${index + 1}`] = video.video_name.trim();
               }
+            } else if (video.video_type === 'zoom') {
+              const zoomMeetingId = extractZoomMeetingId(video.video_id);
+              if (!zoomMeetingId) {
+                return res.status(400).json({ error: `Invalid Zoom meeting ID at position ${index + 1}` });
+              }
+              videoData[`video_ID_${index + 1}`] = zoomMeetingId;
+              videoData[`video_type_${index + 1}`] = 'zoom';
+              if (video.video_name && video.video_name.trim()) {
+                videoData[`video_name_${index + 1}`] = video.video_name.trim();
+              }
             } else {
-              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Supported types: youtube, r2.` });
+              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Supported types: youtube, r2, zoom.` });
             }
           } else if (video && video.video_id) {
             // If no video_type specified, assume YouTube and extract ID from URL if needed

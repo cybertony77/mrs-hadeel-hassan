@@ -37,7 +37,7 @@ cloudinary.config({
 });
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const ALLOWED_FOLDERS = ['HW-PDFs', 'Quizs-PDFs', 'MockExams-PDFs'];
+const ALLOWED_FOLDERS = ['HW-PDFs', 'Quizs-PDFs', 'MockExams-PDFs', 'material'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

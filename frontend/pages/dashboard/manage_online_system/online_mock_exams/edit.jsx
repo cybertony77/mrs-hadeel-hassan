@@ -15,6 +15,12 @@ import { formatMockExamPickerLabel } from '../../../../lib/importOnlineItemLabel
 import { buildMockExamImportFormState } from '../../../../lib/importOnlineFormState';
 import { fetchImportedQuestionImageUrls } from '../../../../lib/fetchImportedQuestionImageUrls';
 import { centersMatchDuplicateClient } from '../../../../lib/onlineItemDuplicate';
+import {
+  newQuestionClientKey,
+  reindexCompositeKeysAfterQuestionRemoved,
+  reindexQuestionErrorsAfterQuestionRemoved,
+  reindexDragOverAfterQuestionRemoved,
+} from '../../../../lib/onlineItemQuestionFormHelpers';
 
 
 export default function EditMockExam() {
@@ -34,6 +40,7 @@ export default function EditMockExam() {
     pdf_file_name: '',
     pdf_url: '',
     questions: [{
+      _clientKey: newQuestionClientKey(),
       question_text: '',
       question_picture: null,
       answers: ['A', 'B'],
@@ -198,6 +205,7 @@ export default function EditMockExam() {
         pdf_url: mockExamData.pdf_url || '',
         questions: meType === 'questions' && mockExamData.questions && Array.isArray(mockExamData.questions)
           ? mockExamData.questions.map(q => ({
+              _clientKey: q._id ? String(q._id) : newQuestionClientKey(),
               question_text: q.question_text || '',
               question_picture: q.question_picture || null,
               ...Object.keys(q)
@@ -209,6 +217,7 @@ export default function EditMockExam() {
               question_explanation: q.question_explanation || ''
             }))
           : [{
+              _clientKey: newQuestionClientKey(),
               question_text: '',
               question_picture: null,
               answers: ['A', 'B'],
@@ -680,6 +689,7 @@ export default function EditMockExam() {
     setFormData(prev => ({
       ...prev,
       questions: [...prev.questions, {
+        _clientKey: newQuestionClientKey(),
         question_text: '',
         question_picture: null,
         answers: ['A', 'B'],
@@ -691,25 +701,23 @@ export default function EditMockExam() {
   };
 
   const removeQuestion = (questionIndex) => {
+    const i = Number(questionIndex);
+    if (Number.isNaN(i) || i < 0) return;
     if (!formData.questions || formData.questions.length === 1) {
       setErrors({ general: '❌ At least one question is required' });
       return;
     }
-    
+
     setFormData(prev => ({
       ...prev,
-      questions: prev.questions.filter((_, idx) => idx !== questionIndex)
+      questions: prev.questions.filter((_, idx) => idx !== i)
     }));
-    setImagePreviews(prev => {
-      const newPreviews = { ...prev };
-      delete newPreviews[questionIndex];
-      return newPreviews;
-    });
-    setImageUrls(prev => {
-      const newUrls = { ...prev };
-      delete newUrls[questionIndex];
-      return newUrls;
-    });
+    setImagePreviews(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setImageUrls(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setUploadingImages(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setLoadingImages(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setErrors(prev => reindexQuestionErrorsAfterQuestionRemoved(prev, i));
+    setDragOverIndex((d) => reindexDragOverAfterQuestionRemoved(d, i));
   };
 
   const handleSubmit = (e) => {
@@ -859,7 +867,7 @@ export default function EditMockExam() {
       submitData.pdf_file_name = formData.pdf_file_name.trim();
       submitData.pdf_url = formData.pdf_url.trim();
     } else {
-      submitData.questions = formData.questions && Array.isArray(formData.questions) ? formData.questions.map(q => ({
+      submitData.questions = formData.questions && Array.isArray(formData.questions) ? formData.questions.map(({ _clientKey, ...q }) => ({
         question_text: q.question_text || '',
         ...buildQuestionPicturesPayload(getQuestionPictures(q)),
         answers: q.answers,
@@ -1153,7 +1161,7 @@ export default function EditMockExam() {
                   style={{ padding: '12px 24px', border: 'none', borderBottom: activeTab === 'questions' ? '3px solid #1FA8DC' : '3px solid transparent', backgroundColor: 'transparent', color: activeTab === 'questions' ? '#1FA8DC' : '#6c757d', fontWeight: activeTab === 'questions' ? '600' : '500', cursor: 'pointer', fontSize: '1rem', transition: 'all 0.2s ease' }}>
                   Questions
                 </button>
-                <button type="button" onClick={() => { setActiveTab('pdf'); setFormData({ ...formData, mock_exam_type: 'pdf', questions: [{ question_text: '', question_picture: null, answers: ['A', 'B'], answer_texts: ['', ''], correct_answer: '', question_explanation: '' }], timer_type: 'no_timer', timer: null }); }}
+                <button type="button" onClick={() => { setActiveTab('pdf'); setFormData({ ...formData, mock_exam_type: 'pdf', questions: [{ _clientKey: newQuestionClientKey(), question_text: '', question_picture: null, answers: ['A', 'B'], answer_texts: ['', ''], correct_answer: '', question_explanation: '' }], timer_type: 'no_timer', timer: null }); }}
                   style={{ padding: '12px 24px', border: 'none', borderBottom: activeTab === 'pdf' ? '3px solid #1FA8DC' : '3px solid transparent', backgroundColor: 'transparent', color: activeTab === 'pdf' ? '#1FA8DC' : '#6c757d', fontWeight: activeTab === 'pdf' ? '600' : '500', cursor: 'pointer', fontSize: '1rem', transition: 'all 0.2s ease' }}>
                   PDF
                 </button>
@@ -1440,7 +1448,7 @@ export default function EditMockExam() {
 
                 {/* Questions */}
                 {formData.questions && Array.isArray(formData.questions) && formData.questions.map((question, qIdx) => (
-              <div key={qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
+              <div key={question._clientKey || qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '1.1rem', textAlign: 'left' }}>
                     Question {qIdx + 1}
@@ -1448,7 +1456,13 @@ export default function EditMockExam() {
                   {formData.questions && formData.questions.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeQuestion(qIdx)}
+                      data-q-index={qIdx}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const raw = e.currentTarget.getAttribute('data-q-index');
+                        removeQuestion(raw != null && raw !== '' ? Number(raw) : qIdx);
+                      }}
                       style={{
                         padding: '6px 12px',
                         backgroundColor: '#dc3545',

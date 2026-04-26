@@ -924,7 +924,7 @@ export default function MyInfo() {
                 📋 No lessons records found for this student
               </div>
             ) : (
-              <ScrollArea h="calc(30rem * var(--mantine-scale))" type="hover" className={styles.scrolled}>
+              <ScrollArea h={500} type="always" className={styles.scrolled} scrollbars="xy">
                 <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: '950px' }}>
                   <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
                     <Table.Tr>

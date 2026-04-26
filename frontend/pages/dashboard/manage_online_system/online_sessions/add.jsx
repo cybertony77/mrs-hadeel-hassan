@@ -19,6 +19,17 @@ function extractYouTubeId(url) {
   return match ? match[1] : null;
 }
 
+function extractZoomMeetingId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const noSpaces = raw.replace(/\s+/g, '');
+  if (/^[0-9]+$/.test(noSpaces)) return noSpaces;
+  const match = noSpaces.match(/zoom\.us\/(?:j|wc\/j(?:oin)?)\/([0-9]+)/i);
+  if (match?.[1]) return match[1];
+  // UUID selected from Zoom recordings list
+  return noSpaces;
+}
+
 // Extract week number from week string (e.g., "week 01" -> 1)
 function extractWeekNumber(weekString) {
   if (!weekString) return null;
@@ -37,6 +48,7 @@ export default function AddOnlineSession() {
       youtube_url: '',
       video_source: 'youtube',
       r2_key: '',
+      zoom_meeting_id: '',
       upload_file_name: '',
       upload_progress: 0,
       upload_status: 'idle',
@@ -125,6 +137,7 @@ export default function AddOnlineSession() {
         youtube_url: '',
         video_source: 'youtube',
         r2_key: '',
+        zoom_meeting_id: '',
         upload_file_name: '',
         upload_progress: 0,
         upload_status: 'idle',
@@ -167,6 +180,7 @@ export default function AddOnlineSession() {
         youtube_url: url,
         video_source: 'youtube',
         r2_key: '',
+        zoom_meeting_id: '',
         upload_file_name: '',
         upload_progress: 0,
         upload_status: 'idle',
@@ -181,6 +195,14 @@ export default function AddOnlineSession() {
     }
   };
 
+  const handleClearYouTubeUrl = (index) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = { ...newVideos[index], youtube_url: '' };
+      return { ...prev, videos: newVideos };
+    });
+  };
+
   // Handle R2 upload complete
   const handleR2Upload = (index, r2Key, fileName) => {
     setFormData(prev => {
@@ -192,6 +214,7 @@ export default function AddOnlineSession() {
         video_source: r2Key ? 'r2' : 'youtube',
         ...(r2Key ? {
           youtube_url: '',
+          zoom_meeting_id: '',
           upload_status: 'done',
           upload_progress: 100,
         } : {
@@ -206,6 +229,58 @@ export default function AddOnlineSession() {
       delete newErrors[`video_${index}_upload`];
       setErrors(newErrors);
     }
+  };
+
+  const handleClearR2Upload = (index) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = {
+        ...newVideos[index],
+        r2_key: '',
+        upload_file_name: '',
+        upload_progress: 0,
+        upload_status: 'idle',
+      };
+      return { ...prev, videos: newVideos };
+    });
+  };
+
+  const handleZoomMeetingIdChange = (index, meetingId) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = {
+        ...newVideos[index],
+        zoom_meeting_id: meetingId,
+        video_source: 'zoom',
+        youtube_url: '',
+        r2_key: '',
+        upload_file_name: '',
+        upload_progress: 0,
+        upload_status: 'idle',
+      };
+      return { ...prev, videos: newVideos };
+    });
+    if (errors[`video_${index}_zoom_meeting_id`]) {
+      const newErrors = { ...errors };
+      delete newErrors[`video_${index}_zoom_meeting_id`];
+      setErrors(newErrors);
+    }
+  };
+
+  const handleClearZoomMeetingId = (index) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = { ...newVideos[index], zoom_meeting_id: '' };
+      return { ...prev, videos: newVideos };
+    });
+  };
+
+  const handleVideoSourceChange = (index, source) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = { ...newVideos[index], video_source: source };
+      return { ...prev, videos: newVideos };
+    });
   };
 
   // Handle form input change
@@ -253,7 +328,11 @@ export default function AddOnlineSession() {
 
     // Validate videos - at least one must have either youtube_url or r2_key
     const validVideos = formData.videos.filter(video => {
-      return (video.youtube_url && video.youtube_url.trim()) || (video.r2_key && video.r2_key.trim());
+      return (
+        (video.youtube_url && video.youtube_url.trim()) ||
+        (video.r2_key && video.r2_key.trim()) ||
+        (video.zoom_meeting_id && video.zoom_meeting_id.trim())
+      );
     });
 
     if (validVideos.length === 0) {
@@ -265,11 +344,16 @@ export default function AddOnlineSession() {
       const video = formData.videos[index];
       const hasYoutube = video.youtube_url && video.youtube_url.trim();
       const hasR2 = video.r2_key && video.r2_key.trim();
+      const hasZoom = video.zoom_meeting_id && video.zoom_meeting_id.trim();
 
       if (hasYoutube) {
         const videoId = extractYouTubeId(video.youtube_url.trim());
         if (!videoId) {
           newErrors[`video_${index}_youtube_url`] = '❌ Invalid YouTube URL';
+        }
+      } else if (hasZoom) {
+        if (!extractZoomMeetingId(video.zoom_meeting_id).trim()) {
+          newErrors[`video_${index}_zoom_meeting_id`] = '❌ Invalid Zoom meeting value';
         }
       } else if (!hasR2 && validVideos.length === 0) {
         newErrors[`video_${index}_youtube_url`] = '❌ YouTube URL is required';
@@ -317,6 +401,16 @@ export default function AddOnlineSession() {
             video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null,
           });
         }
+      } else if (video.zoom_meeting_id && video.zoom_meeting_id.trim()) {
+        const meetingId = extractZoomMeetingId(video.zoom_meeting_id);
+        if (!meetingId) {
+          continue;
+        }
+        finalVideoData.push({
+          video_type: 'zoom',
+          video_id: meetingId,
+          video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null,
+        });
       }
     }
 
@@ -537,7 +631,12 @@ export default function AddOnlineSession() {
                   video={video}
                   onVideoNameChange={handleVideoNameChange}
                   onYouTubeUrlChange={handleYouTubeUrlChange}
+                  onZoomMeetingIdChange={handleZoomMeetingIdChange}
+                  onClearYouTubeUrl={handleClearYouTubeUrl}
+                  onClearZoomMeetingId={handleClearZoomMeetingId}
                   onR2Upload={handleR2Upload}
+                  onClearR2Upload={handleClearR2Upload}
+                  onVideoSourceChange={handleVideoSourceChange}
                   onRemove={removeVideo}
                   canRemove={formData.videos.length > 1}
                   errors={errors}

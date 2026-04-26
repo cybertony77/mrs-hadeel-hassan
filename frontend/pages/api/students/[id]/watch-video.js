@@ -122,7 +122,7 @@ export default async function handler(req, res) {
     }
 
     // Determine payment state from request body or session
-    const isFreeVideo = payment_state === 'free' || session.payment_state === 'free';
+    const isPaidVideo = (payment_state || session.payment_state) === 'paid';
 
     if (action === 'view') {
       // Just record that video was opened (no decrement)
@@ -180,7 +180,8 @@ export default async function handler(req, res) {
                 [`lessons.${lesson}.attended`]: true,
                 [`lessons.${lesson}.lastAttendance`]: attendanceString,
                 [`lessons.${lesson}.lastAttendanceCenter`]: 'Online',
-                [`lessons.${lesson}.attendanceDate`]: attendanceDate
+                [`lessons.${lesson}.attendanceDate`]: attendanceDate,
+                ...(isPaidVideo ? { [`lessons.${lesson}.paid`]: true } : {})
               }
             }
           );
@@ -198,7 +199,7 @@ export default async function handler(req, res) {
             comment: null,
             message_state: false,
             homework_degree: null,
-            paid: false
+            paid: isPaidVideo
           };
           const updateResult = await db.collection('students').updateOne(
             { id: student_id },

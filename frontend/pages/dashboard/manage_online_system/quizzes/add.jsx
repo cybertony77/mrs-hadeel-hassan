@@ -15,6 +15,12 @@ import { formatQuizPickerLabel } from '../../../../lib/importOnlineItemLabels';
 import { buildQuizImportFormState } from '../../../../lib/importOnlineFormState';
 import { fetchImportedQuestionImageUrls } from '../../../../lib/fetchImportedQuestionImageUrls';
 import { centersMatchDuplicateClient } from '../../../../lib/onlineItemDuplicate';
+import {
+  newQuestionClientKey,
+  reindexCompositeKeysAfterQuestionRemoved,
+  reindexQuestionErrorsAfterQuestionRemoved,
+  reindexDragOverAfterQuestionRemoved,
+} from '../../../../lib/onlineItemQuestionFormHelpers';
 
 
 export default function AddQuiz() {
@@ -33,6 +39,7 @@ export default function AddQuiz() {
     pdf_file_name: '',
     pdf_url: '',
     questions: [{
+      _clientKey: newQuestionClientKey(),
       question_text: '',
       question_picture: null,
       answers: ['A', 'B', 'C', 'D'],
@@ -524,6 +531,7 @@ export default function AddQuiz() {
     setFormData(prev => ({
       ...prev,
       questions: [...(prev.questions || []), {
+        _clientKey: newQuestionClientKey(),
         question_text: '',
         question_picture: null,
         answers: ['A', 'B', 'C', 'D'],
@@ -535,20 +543,21 @@ export default function AddQuiz() {
   };
 
   const removeQuestion = (questionIndex) => {
+    const i = Number(questionIndex);
+    if (Number.isNaN(i) || i < 0) return;
     if (!formData.questions || formData.questions.length === 1) {
       setErrors({ general: '❌ At least one question is required' });
       return;
     }
-    
+
     setFormData(prev => ({
       ...prev,
-      questions: prev.questions.filter((_, idx) => idx !== questionIndex)
+      questions: prev.questions.filter((_, idx) => idx !== i)
     }));
-    setImagePreviews(prev => {
-      const newPreviews = { ...prev };
-      delete newPreviews[questionIndex];
-      return newPreviews;
-    });
+    setImagePreviews(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setUploadingImages(prev => reindexCompositeKeysAfterQuestionRemoved(prev, i));
+    setErrors(prev => reindexQuestionErrorsAfterQuestionRemoved(prev, i));
+    setDragOverIndex((d) => reindexDragOverAfterQuestionRemoved(d, i));
   };
 
   const handleSubmit = (e) => {
@@ -704,7 +713,7 @@ export default function AddQuiz() {
       submitData.pdf_file_name = formData.pdf_file_name.trim();
       submitData.pdf_url = formData.pdf_url.trim();
     } else if (formData.questions && Array.isArray(formData.questions)) {
-      submitData.questions = formData.questions.map(q => ({
+      submitData.questions = formData.questions.map(({ _clientKey, ...q }) => ({
         question_text: q.question_text || '',
         ...buildQuestionPicturesPayload(getQuestionPictures(q)),
         answers: q.answers,
@@ -986,6 +995,7 @@ export default function AddQuiz() {
                       ...formData,
                       quiz_type: 'pdf',
                       questions: [{
+                        _clientKey: newQuestionClientKey(),
                         question_text: '',
                         question_picture: null,
                         answers: ['A', 'B'],
@@ -1322,7 +1332,7 @@ export default function AddQuiz() {
 
                 {/* Questions */}
                 {formData.questions && Array.isArray(formData.questions) && formData.questions.map((question, qIdx) => (
-              <div key={qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
+              <div key={question._clientKey || qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '1.1rem', textAlign: 'left' }}>
                     Question {qIdx + 1}
@@ -1330,7 +1340,13 @@ export default function AddQuiz() {
                   {formData.questions.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeQuestion(qIdx)}
+                      data-q-index={qIdx}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const raw = e.currentTarget.getAttribute('data-q-index');
+                        removeQuestion(raw != null && raw !== '' ? Number(raw) : qIdx);
+                      }}
                       style={{
                         padding: '6px 12px',
                         backgroundColor: '#dc3545',
