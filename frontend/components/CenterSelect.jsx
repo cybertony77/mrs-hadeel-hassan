@@ -1,6 +1,19 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../lib/axios';
+
+/** Same cache entry as dashboard/centers.jsx — must return full center objects, not only names. */
+function centerRowKey(c) {
+  if (c == null) return '';
+  return String(c.id ?? c._id ?? c.name ?? '');
+}
+
+function selectedCenterLabel(value) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && typeof value.name === 'string') return value.name;
+  return '';
+}
 
 export default function CenterSelect({ selectedCenter, onCenterChange, required = false, isOpen, onToggle, onClose }) {
   // Handle legacy props (value, onChange) for backward compatibility
@@ -9,17 +22,16 @@ export default function CenterSelect({ selectedCenter, onCenterChange, required 
   const actualOnToggle = onToggle || (() => setInternalIsOpen(!internalIsOpen));
   const actualOnClose = onClose || (() => setInternalIsOpen(false));
 
+  const selectedLabel = useMemo(() => selectedCenterLabel(selectedCenter), [selectedCenter]);
+
   // Authentication is now handled by _app.js with HTTP-only cookies
 
-  // Fetch centers from API
+  // Fetch centers from API (same shape as pages/dashboard/centers.jsx — shared React Query cache)
   const { data: centers = [], isLoading, error } = useQuery({
     queryKey: ['centers'],
     queryFn: async () => {
-      console.log('🔄 CenterSelect: Fetching centers data');
       const response = await apiClient.get('/api/centers');
-      const centerNames = response.data.centers.map(center => center.name);
-      console.log('🔄 CenterSelect: Received centers:', centerNames);
-      return centerNames;
+      return Array.isArray(response.data?.centers) ? response.data.centers : [];
     },
     retry: 3,
     retryDelay: 1000,
@@ -27,8 +39,8 @@ export default function CenterSelect({ selectedCenter, onCenterChange, required 
     gcTime: 10 * 60 * 1000 // 10 minutes
   });
 
-  const handleCenterSelect = (center) => {
-    onCenterChange(center);
+  const handleCenterSelect = (centerName) => {
+    onCenterChange(centerName);
     actualOnClose();
   };
 
@@ -45,9 +57,9 @@ export default function CenterSelect({ selectedCenter, onCenterChange, required 
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: '1rem',
-          color: selectedCenter ? '#1FA8DC' : '#adb5bd',
-          backgroundColor: selectedCenter ? '#f0f8ff' : '#ffffff',
-          fontWeight: selectedCenter ? '600' : '400',
+          color: selectedLabel ? '#1FA8DC' : '#adb5bd',
+          backgroundColor: selectedLabel ? '#f0f8ff' : '#ffffff',
+          fontWeight: selectedLabel ? '600' : '400',
           transition: 'all 0.3s ease',
           boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
         }}
@@ -55,7 +67,7 @@ export default function CenterSelect({ selectedCenter, onCenterChange, required 
         onBlur={() => setTimeout(actualOnClose, 200)}
       >
         <span>
-          {isLoading ? 'Loading centers...' : (selectedCenter || 'Select Center')}
+          {isLoading ? 'Loading centers...' : (selectedLabel || 'Select Center')}
         </span>
       </div>
       
@@ -125,25 +137,32 @@ export default function CenterSelect({ selectedCenter, onCenterChange, required 
             >
               No centers available
             </div>
-          ) : centers.map((center) => (
+          ) : centers.map((center) => {
+            const name = center?.name != null ? String(center.name) : '';
+            const rowKey = centerRowKey(center) || name;
+            const isSelected = Boolean(name && selectedLabel === name);
+            return (
             <div
-              key={center}
+              key={rowKey}
               style={{
                 padding: '12px 16px',
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: selectedCenter === center ? '#1FA8DC' : '#000000',
-                backgroundColor: selectedCenter === center ? '#f0f8ff' : '#ffffff',
-                fontWeight: selectedCenter === center ? '600' : '400'
+                color: isSelected ? '#1FA8DC' : '#000000',
+                backgroundColor: isSelected ? '#f0f8ff' : '#ffffff',
+                fontWeight: isSelected ? '600' : '400'
               }}
-              onClick={() => handleCenterSelect(center)}
-              onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}
+              onClick={() => handleCenterSelect(name)}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f8f9fa'; }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = isSelected ? '#f0f8ff' : '#ffffff';
+              }}
             >
-              {center}
+              {name || '(Unnamed center)'}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

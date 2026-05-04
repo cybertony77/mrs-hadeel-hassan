@@ -134,6 +134,7 @@ export default async function handler(req, res) {
             quiz_type: quiz.quiz_type || 'questions',
             deadline_type: quiz.deadline_type || 'no_deadline',
             deadline_date: quiz.deadline_date || null,
+            deadline_time: quiz.deadline_time ?? null,
             timer: quiz.timer,
             shuffle_questions_and_answers: quiz.shuffle_questions_and_answers || false,
             show_details_after_submitting: quiz.show_details_after_submitting || false,

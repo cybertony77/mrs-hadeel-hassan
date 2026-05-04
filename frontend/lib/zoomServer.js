@@ -130,10 +130,15 @@ export async function getZoomMeetingMp4DownloadUrl(meetingId, forceRefresh = fal
   };
 }
 
+const ZOOM_LIST_FETCH_MS = 60_000;
+
 export async function listZoomUserRecordings(nextPageToken = '', forceRefresh = false) {
-  const token = (ZOOM_ACCESS_TOKEN && String(ZOOM_ACCESS_TOKEN).trim())
+  const staticToken = ZOOM_ACCESS_TOKEN && String(ZOOM_ACCESS_TOKEN).trim()
     ? String(ZOOM_ACCESS_TOKEN).trim()
-    : await getZoomAccessToken(forceRefresh);
+    : '';
+  // After a 401, callers pass forceRefresh: use OAuth so a stale env token does not loop forever.
+  const token =
+    staticToken && !forceRefresh ? staticToken : await getZoomAccessToken(forceRefresh);
   const safeNextPageToken = String(nextPageToken || '').trim();
   const today = new Date();
   const to = today.toISOString().slice(0, 10);
@@ -142,19 +147,35 @@ export async function listZoomUserRecordings(nextPageToken = '', forceRefresh = 
   const from = fromDate.toISOString().slice(0, 10);
 
   const url = new URL('https://api.zoom.us/v2/users/me/recordings');
-  url.searchParams.set('page_size', '50');
+  url.searchParams.set('page_size', '30');
   url.searchParams.set('from', from);
   url.searchParams.set('to', to);
   if (safeNextPageToken) {
     url.searchParams.set('next_page_token', safeNextPageToken);
   }
 
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ZOOM_LIST_FETCH_MS);
+
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      const err = new Error('Zoom recordings request timed out. Try again or use a smaller date range.');
+      err.statusCode = 504;
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const payload = await response.json().catch(() => ({}));
 

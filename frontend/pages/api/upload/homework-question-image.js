@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       type: 'private', // Store as private
       overwrite: false,
       invalidate: true,
-      timeout: 60000, // 60 second timeout for large files
+      timeout: 120000, // large base64 payloads + slow links need more time than default
     });
 
     // Return only the public_id

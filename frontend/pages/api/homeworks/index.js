@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
 import { duplicateCenterMongoFragment } from '../../../lib/onlineItemDuplicate';
+import {
+  isDeadlineStrictlyInFutureEgypt,
+  normalizeDeadlineTimeField,
+  parseDeadlineTime,
+} from '../../../lib/deadlineTimeEgypt';
 
 function loadEnvConfig() {
   try {
@@ -90,7 +95,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       // Create new homework
-      const { lesson_name, timer, questions, lesson, course, courseType, center, homework_type, deadline_type, deadline_date, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, homework_type, deadline_type, deadline_date, deadline_time, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       if (!lesson_name || lesson_name.trim() === '') {
         return res.status(400).json({ error: '❌ Lesson name is required' });
@@ -166,16 +171,17 @@ export default async function handler(req, res) {
         }
       }
 
-      // Validate deadline date if with deadline is selected
       if (deadline_type === 'with_deadline') {
         if (!deadline_date) {
           return res.status(400).json({ error: '❌ Deadline date is required' });
         }
-        const selectedDate = new Date(deadline_date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate <= today) {
-          return res.status(400).json({ error: '❌ Deadline date must be in the future' });
+        const rawT = deadline_time != null && String(deadline_time).trim() !== '' ? String(deadline_time).trim() : '';
+        if (rawT && !parseDeadlineTime(rawT)) {
+          return res.status(400).json({ error: '❌ Invalid deadline time (use format like 04:30 AM)' });
+        }
+        const normTime = normalizeDeadlineTimeField(deadline_type, deadline_time);
+        if (!isDeadlineStrictlyInFutureEgypt(deadline_date, normTime)) {
+          return res.status(400).json({ error: '❌ Deadline must be in the future (Egypt time)' });
         }
       }
 
@@ -203,6 +209,8 @@ export default async function handler(req, res) {
         finalState = state;
       }
 
+      const normDeadlineTime = normalizeDeadlineTimeField(deadline_type || 'no_deadline', deadline_time);
+
       const homework = {
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
@@ -212,6 +220,7 @@ export default async function handler(req, res) {
         homework_type: homework_type,
         deadline_type: deadline_type || 'no_deadline',
         deadline_date: deadline_type === 'with_deadline' ? deadline_date : null,
+        deadline_time: deadline_type === 'with_deadline' ? normDeadlineTime : null,
         timer: homework_type === 'questions' && timer !== null && timer !== undefined ? parseInt(timer) : null,
         shuffle_questions_and_answers: homework_type === 'questions' ? (shuffle_questions_and_answers === true || shuffle_questions_and_answers === 'true') : false,
         show_details_after_submitting: homework_type === 'questions' ? (show_details_after_submitting === true || show_details_after_submitting === 'true') : false,
@@ -262,7 +271,7 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       // Update homework
       const { id } = req.query;
-      const { lesson_name, timer, questions, lesson, course, courseType, center, homework_type, deadline_type, deadline_date, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, homework_type, deadline_type, deadline_date, deadline_time, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       if (!id) {
         return res.status(400).json({ error: '❌ Homework ID is required' });
@@ -342,16 +351,17 @@ export default async function handler(req, res) {
         }
       }
 
-      // Validate deadline date if with deadline is selected
       if (deadline_type === 'with_deadline') {
         if (!deadline_date) {
           return res.status(400).json({ error: '❌ Deadline date is required' });
         }
-        const selectedDate = new Date(deadline_date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate <= today) {
-          return res.status(400).json({ error: '❌ Deadline date must be in the future' });
+        const rawT = deadline_time != null && String(deadline_time).trim() !== '' ? String(deadline_time).trim() : '';
+        if (rawT && !parseDeadlineTime(rawT)) {
+          return res.status(400).json({ error: '❌ Invalid deadline time (use format like 04:30 AM)' });
+        }
+        const normTime = normalizeDeadlineTimeField(deadline_type, deadline_time);
+        if (!isDeadlineStrictlyInFutureEgypt(deadline_date, normTime)) {
+          return res.status(400).json({ error: '❌ Deadline must be in the future (Egypt time)' });
         }
       }
 
@@ -380,6 +390,8 @@ export default async function handler(req, res) {
         finalState = state;
       }
 
+      const normDeadlineTimePut = normalizeDeadlineTimeField(deadline_type || 'no_deadline', deadline_time);
+
       const updateData = {
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
@@ -389,6 +401,7 @@ export default async function handler(req, res) {
         homework_type: homework_type,
         deadline_type: deadline_type || 'no_deadline',
         deadline_date: deadline_type === 'with_deadline' ? deadline_date : null,
+        deadline_time: deadline_type === 'with_deadline' ? normDeadlineTimePut : null,
         timer: homework_type === 'questions' && timer !== null && timer !== undefined ? parseInt(timer) : null,
         shuffle_questions_and_answers: homework_type === 'questions' ? (shuffle_questions_and_answers === true || shuffle_questions_and_answers === 'true') : false,
         show_details_after_submitting: homework_type === 'questions' ? (show_details_after_submitting === true || show_details_after_submitting === 'true') : false,

@@ -1,19 +1,57 @@
 import { authMiddleware } from '../../../lib/authMiddleware';
 import { listZoomUserRecordings } from '../../../lib/zoomServer';
 
-function formatDateTime(dateString) {
+function formatDateTime(dateString, timezone) {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return '';
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  let hours = date.getHours();
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  const hoursStr = String(hours).padStart(2, '0');
-  return `${day}/${month}/${year} at ${hoursStr}:${minutes} ${ampm}`;
+  const normalizedTimezone = String(timezone || '').trim();
+  const safeTimezone =
+    normalizedTimezone && normalizedTimezone !== 'UTC'
+      ? normalizedTimezone
+      : 'Africa/Cairo';
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: safeTimezone,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).formatToParts(date);
+
+    const getPart = (type) => parts.find((part) => part.type === type)?.value || '';
+    const day = getPart('day');
+    const month = getPart('month');
+    const year = getPart('year');
+    const hour = getPart('hour');
+    const minute = getPart('minute');
+    const dayPeriod = (getPart('dayPeriod') || '').toUpperCase();
+
+    return `${day}/${month}/${year} at ${hour}:${minute} ${dayPeriod}`;
+  } catch {
+    // Fallback to UTC if provided timezone is invalid.
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'UTC',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).formatToParts(date);
+
+    const getPart = (type) => parts.find((part) => part.type === type)?.value || '';
+    const day = getPart('day');
+    const month = getPart('month');
+    const year = getPart('year');
+    const hour = getPart('hour');
+    const minute = getPart('minute');
+    const dayPeriod = (getPart('dayPeriod') || '').toUpperCase();
+
+    return `${day}/${month}/${year} at ${hour}:${minute} ${dayPeriod}`;
+  }
 }
 
 function formatDuration(durationMinutes) {
@@ -69,7 +107,7 @@ export default async function handler(req, res) {
       timezone: meeting.timezone || null,
       created_at: resolveMeetingDate(meeting),
       recording_files: Array.isArray(meeting.recording_files) ? meeting.recording_files : [],
-      created_at_formated: formatDateTime(resolveMeetingDate(meeting)),
+      created_at_formated: formatDateTime(resolveMeetingDate(meeting), meeting.timezone),
       duration_furmated: formatDuration(meeting.duration),
     }));
 

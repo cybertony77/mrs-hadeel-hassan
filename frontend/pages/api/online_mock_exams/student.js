@@ -53,6 +53,7 @@ export default async function handler(req, res) {
       // Get student's course and courseType from students collection
       let studentCourse = null;
       let studentCourseType = null;
+      let studentMainCenter = null;
       if (user.role === 'student') {
         // JWT contains assistant_id, use that to find student
         const studentId = user.assistant_id || user.id;
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
           if (student) {
             studentCourse = student.course;
             studentCourseType = student.courseType;
+            studentMainCenter = student.main_center;
             console.log('✅ Using student course:', studentCourse, 'courseType:', studentCourseType);
           }
         }
@@ -132,6 +134,7 @@ export default async function handler(req, res) {
             mock_exam_type: me.mock_exam_type || 'questions',
             deadline_type: me.deadline_type || 'no_deadline',
             deadline_date: me.deadline_date || null,
+            deadline_time: me.deadline_time ?? null,
             timer: me.timer || null,
             shuffle_questions_and_answers: me.shuffle_questions_and_answers || false,
             show_details_after_submitting: me.show_details_after_submitting || false

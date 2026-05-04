@@ -134,6 +134,7 @@ export default async function handler(req, res) {
             homework_type: hw.homework_type || 'questions',
             deadline_type: hw.deadline_type || 'no_deadline',
             deadline_date: hw.deadline_date || null,
+            deadline_time: hw.deadline_time ?? null,
             timer: hw.timer || null,
             shuffle_questions_and_answers: hw.shuffle_questions_and_answers || false,
             show_details_after_submitting: hw.show_details_after_submitting || false

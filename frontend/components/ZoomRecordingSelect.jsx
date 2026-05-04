@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import apiClient from '../lib/axios';
 
 const fetchRecordings = (token) => {
-  const url = token?.trim()
+  const path = token?.trim()
     ? `/api/zoom/recordings?next_page_token=${encodeURIComponent(token.trim())}`
     : '/api/zoom/recordings';
 
-  return axios.get(url);
+  return apiClient.get(path);
 };
 
 export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
@@ -15,7 +15,7 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
   const [isOpen, setIsOpen] = useState(false);
   const currentToken = tokenHistory[tokenHistory.length - 1];
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ['zoom-recordings', currentToken],
     queryFn: async () => {
       const response = await fetchRecordings(currentToken);
@@ -24,6 +24,8 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
     staleTime: 30 * 1000,
     refetchOnWindowFocus: false,
     enabled: isOpen,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 8000),
   });
 
   const meetings = useMemo(() => data?.meetings || [], [data]);
@@ -130,6 +132,30 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
                   />
                   Loading Zoom recordings...
                 </div>
+              ) : isError ? (
+                <div style={{ padding: '14px 16px', color: '#b91c1c', textAlign: 'center', fontWeight: 500 }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    {error?.response?.data?.error ||
+                      error?.response?.data?.details ||
+                      error?.message ||
+                      'Could not load recordings.'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => refetch()}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid #fecaca',
+                      background: '#fff',
+                      color: '#991b1b',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
               ) : meetings.length === 0 ? (
                 <div style={{ padding: '14px 16px', color: '#6b7280', textAlign: 'center', fontWeight: 500 }}>
                   No recordings found
@@ -192,7 +218,7 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
                   if (hasPrev) e.currentTarget.style.background = '#ffffff';
                 }}
               >
-                Previous 50
+                Previous 30
               </button>
               <button
                 type="button"
@@ -216,7 +242,7 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
                   if (hasNext) e.currentTarget.style.background = '#ffffff';
                 }}
               >
-                Next 50
+                Next 30
               </button>
             </div>
           )}

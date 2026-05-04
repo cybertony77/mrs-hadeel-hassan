@@ -108,25 +108,6 @@ export async function getSignedImageUrlServer(publicId) {
       api_secret: envConfig.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_API_SECRET,
     });
     
-    // First, try to verify the image exists (but don't fail if we can't verify)
-    let imageExists = true;
-    try {
-      const resource = await cloudinary.api.resource(publicId, {
-        type: 'private',
-        resource_type: 'image'
-      });
-      console.log('✅ Image verified in Cloudinary:', { publicId, format: resource.format });
-    } catch (apiError) {
-      if (apiError.http_code === 404) {
-        console.error('❌ Image not found in Cloudinary:', publicId);
-        imageExists = false;
-        // Don't return null yet - try to generate URL anyway in case it's a permission issue
-      } else {
-        console.warn('⚠️ Could not verify image (might be permission issue):', apiError.message);
-        // Continue - might be a permission issue with api.resource but URL generation might work
-      }
-    }
-    
     // Generate signed URL - use the same method as authenticated access
     // Cloudinary SDK automatically handles signing and versioning
     const url = cloudinary.url(publicId, {
@@ -141,15 +122,8 @@ export async function getSignedImageUrlServer(publicId) {
       publicId, 
       url,
       cloudName: cloudinary.config().cloud_name,
-      imageExists,
       urlFormat: url.includes('/s--') ? 'signed' : 'unsigned'
     });
-    
-    // If we confirmed the image doesn't exist, return null
-    if (!imageExists) {
-      console.error('❌ Returning null - image confirmed not to exist in Cloudinary');
-      return null;
-    }
     
     return url;
   } catch (error) {
