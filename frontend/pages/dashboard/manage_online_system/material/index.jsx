@@ -4,11 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import Title from '../../../../components/Title';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
 import CenterSelect from '../../../../components/CenterSelect';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
+const PdfViewerModal = dynamic(() => import('../../../../components/PdfViewerModal'), { ssr: false });
 import apiClient from '../../../../lib/axios';
 
 function InputWithButton(props) {
@@ -37,6 +39,7 @@ export default function MaterialPage() {
   const [selectedMaterial, setSelectedMaterial] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [notePopup, setNotePopup] = useState(null);
+  const [pdfViewer, setPdfViewer] = useState({ isOpen: false, url: '', name: '' });
   const successTimeoutRef = useRef(null);
 
   const [searchInput, setSearchInput] = useState('');
@@ -172,6 +175,15 @@ export default function MaterialPage() {
                         Download PDF
                       </button>
                     )}
+                    {item.pdf_url && (
+                      <button
+                        onClick={() => setPdfViewer({ isOpen: true, url: item.pdf_url, name: `${item.pdf_file_name || 'file'}.pdf` })}
+                        style={{ padding: '8px 16px', background: '#0d6efd', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Image src="/external-link.svg" alt="Open PDF" width={18} height={18} />
+                        Open PDF
+                      </button>
+                    )}
                     {item.comment && (
                       <button onClick={() => setNotePopup(item.comment)} style={{ padding: '8px 16px', background: '#1FA8DC', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Image src="/notes4.svg" alt="Notes" width={18} height={18} />
@@ -223,6 +235,13 @@ export default function MaterialPage() {
           </div>
         </div>
       )}
+
+      <PdfViewerModal
+        isOpen={pdfViewer.isOpen}
+        fileUrl={pdfViewer.url}
+        fileName={pdfViewer.name}
+        onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
+      />
 
       <style jsx>{`
         .material-item {

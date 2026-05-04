@@ -4,6 +4,7 @@ import Title from '../../../../components/Title';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
 import CenterSelect from '../../../../components/CenterSelect';
@@ -14,6 +15,8 @@ import { useSystemConfig } from '../../../../lib/api/system';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 import HomeworkAnalyticsChart from '../../../../components/HomeworkAnalyticsChart';
+import { formatDeadlineCardLabel } from '../../../../lib/deadlineTimeEgypt';
+const PdfViewerModal = dynamic(() => import('../../../../components/PdfViewerModal'), { ssr: false });
 
 function InputWithButton(props) {
   const theme = useMantineTheme();
@@ -41,6 +44,7 @@ export default function MockExams() {
   const isMockExamsEnabled = systemConfig?.mock_exams === true || systemConfig?.mock_exams === 'true';
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [notePopup, setNotePopup] = useState(null);
+  const [pdfViewer, setPdfViewer] = useState({ isOpen: false, url: '', name: '' });
   
   // Redirect if feature is disabled
   useEffect(() => {
@@ -570,21 +574,7 @@ export default function MockExams() {
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Image src="/clock.svg" alt="Deadline" width={18} height={18} />
                             {mockExam.deadline_type === 'with_deadline' && mockExam.deadline_date
-                              ? (() => {
-                                  try {
-                                    // Parse date in local timezone to avoid timezone shift
-                                    let deadline;
-                                    if (typeof mockExam.deadline_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(mockExam.deadline_date)) {
-                                      const [year, month, day] = mockExam.deadline_date.split('-').map(Number);
-                                      deadline = new Date(year, month - 1, day);
-                                    } else {
-                                      deadline = new Date(mockExam.deadline_date);
-                                    }
-                                    return `With deadline date : ${deadline.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}`;
-                                  } catch (e) {
-                                    return `With deadline date : ${mockExam.deadline_date}`;
-                                  }
-                                })()
+                              ? formatDeadlineCardLabel(mockExam.deadline_date, mockExam.deadline_time)
                               : 'With no deadline date'}
                           </span>
                         </div>
@@ -605,6 +595,19 @@ export default function MockExams() {
                         style={{ padding: '8px 16px', backgroundColor: '#32b750', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         <Image src="/pdf.svg" alt="PDF" width={18} height={18} style={{ display: 'inline-block' }} />
                         Download PDF
+                      </button>
+                    )}
+                    {mockExam.mock_exam_type === 'pdf' && mockExam.pdf_url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPdfViewer({ isOpen: true, url: mockExam.pdf_url, name: `${mockExam.pdf_file_name || 'file'}.pdf` });
+                        }}
+                        className="me-action-btn"
+                        style={{ padding: '8px 16px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <Image src="/external-link.svg" alt="Open PDF" width={18} height={18} style={{ display: 'inline-block' }} />
+                        Open PDF
                       </button>
                     )}
                     {mockExam.comment && (
@@ -1209,6 +1212,12 @@ export default function MockExams() {
           </div>
         </div>
       )}
+      <PdfViewerModal
+        isOpen={pdfViewer.isOpen}
+        fileUrl={pdfViewer.url}
+        fileName={pdfViewer.name}
+        onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
+      />
     </div>
   );
 }

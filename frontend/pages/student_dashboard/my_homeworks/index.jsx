@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import Title from '../../../components/Title';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../lib/axios';
@@ -8,10 +9,12 @@ import { useProfile } from '../../../lib/api/auth';
 import { useSystemConfig } from '../../../lib/api/system';
 import NeedHelp from '../../../components/NeedHelp';
 import HomeworkPerformanceChart from '../../../components/HomeworkPerformanceChart';
+const PdfViewerModal = dynamic(() => import('../../../components/PdfViewerModal'), { ssr: false });
 import StudentLessonSelect from '../../../components/StudentLessonSelect';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
+import { formatDeadlineCardLabel, isDeadlinePassedEgypt } from '../../../lib/deadlineTimeEgypt';
 
 // Input with Button Component (matching manage online system style)
 function InputWithButton(props) {
@@ -57,7 +60,14 @@ export default function MyHomeworks() {
   const [errorMessage, setErrorMessage] = useState('');
   const [onlineHomeworks, setOnlineHomeworks] = useState([]);
   const [notePopup, setNotePopup] = useState(null);
-  
+  const [pdfViewer, setPdfViewer] = useState({ isOpen: false, url: '', name: '' });
+  const [deadlineClockTick, setDeadlineClockTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setDeadlineClockTick((n) => n + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
+
   // Check for error message in URL query
   useEffect(() => {
     if (router.query.error) {
@@ -334,45 +344,11 @@ export default function MyHomeworks() {
     return null;
   };
 
-  // Helper function to check if deadline has passed
-  const isDeadlinePassed = (deadlineDate) => {
-    if (!deadlineDate) return false;
-    
-    try {
-      // Parse date in local timezone to avoid timezone shift
-      let deadline;
-      if (typeof deadlineDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(deadlineDate)) {
-        // If it's a string in YYYY-MM-DD format, parse it in local timezone
-        const [year, month, day] = deadlineDate.split('-').map(Number);
-        deadline = new Date(year, month - 1, day);
-      } else if (deadlineDate instanceof Date) {
-        deadline = new Date(deadlineDate);
-      } else {
-        deadline = new Date(deadlineDate);
-      }
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      deadline.setHours(0, 0, 0, 0);
-      
-      return deadline <= today; // Deadline passed if deadline <= today
-    } catch (e) {
-      return false;
-    }
-  };
-
   // Track if we've loaded student weeks data at least once
   // Track which homeworks have already had deadline penalties applied (to prevent duplicate scoring)
   const deadlinePenaltiesAppliedRef = useRef(new Set());
   
-  /**
-   * DEADLINE DB/SCORE LOGIC DISABLED:
-   * The effect below was updating lessons in the DB and recalculating scores
-   * when deadlines passed. It is now wrapped in a block comment so deadlines
-   * only affect the UI, not the database or scoring.
-   */
-  /*
-  // Check deadlines and update student lessons if needed (only for activated homeworks)
+  // After deadline: if the student never completed this homework online, set lesson hwDone to false (API creates lesson if missing).
   useEffect(() => {
     if (!profile?.id || centerFilteredHomeworks.length === 0) return;
     // Allow the check to proceed even if lessons is undefined - we'll treat it as empty object
@@ -388,25 +364,14 @@ export default function MyHomeworks() {
           homework.lesson &&
           homework.lesson.trim()
         ) {
-          if (isDeadlinePassed(homework.deadline_date)) {
+          if (isDeadlinePassedEgypt(homework.deadline_date, homework.deadline_time)) {
             const lessonName = homework.lesson.trim();
             // Check current lesson data to see if we need to update
             let lessonData = profile?.lessons?.[lessonName];
             
-            // Protected values that should never be overwritten
-            const protectedHwDoneValues = [true, "Not Completed", "No Homework"];
-            
-            // Create unique key for this homework deadline check
             const deadlineKey = `homework_${homework._id}_lesson_${lessonName}`;
-            
-            // Only update if:
-            // 1. We haven't already applied deadline update for this homework (tracked in ref)
-            // 2. hwDone is NOT already false (deadline already applied)
-            // 3. Protected values (true, "Not Completed", "No Homework") should not be overwritten
-            const shouldApplyDeadlineUpdate = !deadlinePenaltiesAppliedRef.current.has(deadlineKey) &&
-                                              (!lessonData || 
-                                               (!protectedHwDoneValues.includes(lessonData.hwDone) && 
-                                                lessonData.hwDone !== false));
+            const shouldApplyDeadlineUpdate =
+              !deadlinePenaltiesAppliedRef.current.has(deadlineKey) && lessonData?.hwDone !== true;
             
             if (shouldApplyDeadlineUpdate) {
               // Check ref FIRST to prevent duplicate calls - this is the primary guard
@@ -559,8 +524,7 @@ export default function MyHomeworks() {
     };
 
     checkDeadlines();
-  }, [profile?.id, profile?.lessons, homeworks, completedHomeworks, isScoringEnabled, queryClient]); // Updated deps for lessons
-  */
+  }, [profile?.id, profile?.lessons, centerFilteredHomeworks, completedHomeworks, isScoringEnabled, queryClient, deadlineClockTick]);
 
   if (isLoading) {
     return (
@@ -798,21 +762,7 @@ export default function MyHomeworks() {
                               <span>•</span>
                               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Image src="/clock.svg" alt="Deadline" width={18} height={18} />
-                                {homework.deadline_date ? (() => {
-                                  try {
-                                    // Parse date in local timezone
-                                    let deadline;
-                                    if (typeof homework.deadline_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(homework.deadline_date)) {
-                                      const [year, month, day] = homework.deadline_date.split('-').map(Number);
-                                      deadline = new Date(year, month - 1, day);
-                                    } else {
-                                      deadline = new Date(homework.deadline_date);
-                                    }
-                                    return `With deadline date : ${deadline.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}`;
-                                  } catch (e) {
-                                    return `With deadline date : ${homework.deadline_date}`;
-                                  }
-                                })() : 'With no deadline date'}
+                                {formatDeadlineCardLabel(homework.deadline_date, homework.deadline_time)}
                               </span>
                             </>
                           )}
@@ -826,6 +776,19 @@ export default function MyHomeworks() {
                         style={{ padding: '8px 16px', backgroundColor: '#32b750', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         <Image src="/pdf.svg" alt="PDF" width={18} height={18} style={{ display: 'inline-block' }} />
                         Download PDF
+                      </button>
+                    )}
+                    {homework.homework_type === 'pdf' && homework.pdf_url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPdfViewer({ isOpen: true, url: homework.pdf_url, name: `${homework.pdf_file_name || 'file'}.pdf` });
+                        }}
+                        className="hw-action-btn"
+                        style={{ padding: '8px 16px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <Image src="/external-link.svg" alt="Open PDF" width={18} height={18} style={{ display: 'inline-block' }} />
+                        Open PDF
                       </button>
                     )}
                     {homework.comment && (
@@ -896,8 +859,34 @@ export default function MyHomeworks() {
                         );
                       }
                       
+                      // Past deadline closes the item even if weeks still show "Not Completed"
+                      if (
+                        homework.deadline_type === 'with_deadline' &&
+                        homework.deadline_date &&
+                        isDeadlinePassedEgypt(homework.deadline_date, homework.deadline_time)
+                      ) {
+                        return (
+                          <button
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '20px',
+                              cursor: 'default',
+                              fontSize: '0.9rem',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                          >
+                            ❌ Not Done
+                          </button>
+                        );
+                      }
+
                       // If hwDone is "Not Completed" or "No Homework", show that status
-                      // (but still allow Start button if not in online_homeworks)
                       if (hwDoneStatus === "Not Completed" || hwDoneStatus === "No Homework") {
                         return (
                           <button
@@ -919,32 +908,7 @@ export default function MyHomeworks() {
                           </button>
                         );
                       }
-                      
-                      // Check if deadline has passed and homework not submitted
-                      if (homework.deadline_type === 'with_deadline' && 
-                          homework.deadline_date && 
-                          isDeadlinePassed(homework.deadline_date)) {
-                        return (
-                          <button
-                            style={{
-                              padding: '8px 16px',
-                              backgroundColor: '#dc3545',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '20px',
-                              cursor: 'default',
-                              fontSize: '0.9rem',
-                              fontWeight: '600',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}
-                          >
-                            ❌ Not Done
-                          </button>
-                        );
-                      }
-                      
+
                       if (homework.homework_type === 'pdf') {
                         return null;
                       }
@@ -1090,6 +1054,12 @@ export default function MyHomeworks() {
           </div>
         </div>
       )}
+      <PdfViewerModal
+        isOpen={pdfViewer.isOpen}
+        fileUrl={pdfViewer.url}
+        fileName={pdfViewer.name}
+        onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
+      />
     </div>
   );
 }

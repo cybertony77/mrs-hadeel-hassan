@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import { useSystemConfig } from '../../../../lib/api/system';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
 import CenterSelect from '../../../../components/CenterSelect';
@@ -14,6 +15,8 @@ import AccountStateSelect from '../../../../components/AccountStateSelect';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 import QuizAnalyticsChart from '../../../../components/QuizAnalyticsChart';
+import { formatDeadlineCardLabel } from '../../../../lib/deadlineTimeEgypt';
+const PdfViewerModal = dynamic(() => import('../../../../components/PdfViewerModal'), { ssr: false });
 
 function InputWithButton(props) {
   const theme = useMantineTheme();
@@ -41,6 +44,7 @@ export default function Quizzes() {
   const isQuizzesEnabled = systemConfig?.quizzes === true || systemConfig?.quizzes === 'true';
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [notePopup, setNotePopup] = useState(null);
+  const [pdfViewer, setPdfViewer] = useState({ isOpen: false, url: '', name: '' });
   
   // Redirect if feature is disabled
   useEffect(() => {
@@ -583,21 +587,7 @@ export default function Quizzes() {
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Image src="/clock.svg" alt="Deadline" width={18} height={18} />
                           {quiz.deadline_type === 'with_deadline' && quiz.deadline_date
-                            ? (() => {
-                                try {
-                                  // Parse date in local timezone to avoid timezone shift
-                                  let deadline;
-                                  if (typeof quiz.deadline_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(quiz.deadline_date)) {
-                                    const [year, month, day] = quiz.deadline_date.split('-').map(Number);
-                                    deadline = new Date(year, month - 1, day);
-                                  } else {
-                                    deadline = new Date(quiz.deadline_date);
-                                  }
-                                  return `With deadline date : ${deadline.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}`;
-                                } catch (e) {
-                                  return `With deadline date : ${quiz.deadline_date}`;
-                                }
-                              })()
+                            ? formatDeadlineCardLabel(quiz.deadline_date, quiz.deadline_time)
                             : 'With no deadline date'}
                         </span>
                       </div>
@@ -617,6 +607,19 @@ export default function Quizzes() {
                         style={{ padding: '8px 16px', backgroundColor: '#32b750', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         <Image src="/pdf.svg" alt="PDF" width={18} height={18} style={{ display: 'inline-block' }} />
                         Download PDF
+                      </button>
+                    )}
+                    {quiz.quiz_type === 'pdf' && quiz.pdf_url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPdfViewer({ isOpen: true, url: quiz.pdf_url, name: `${quiz.pdf_file_name || 'file'}.pdf` });
+                        }}
+                        className="qz-action-btn"
+                        style={{ padding: '8px 16px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <Image src="/external-link.svg" alt="Open PDF" width={18} height={18} style={{ display: 'inline-block' }} />
+                        Open PDF
                       </button>
                     )}
                     {quiz.comment && (
@@ -1208,6 +1211,12 @@ export default function Quizzes() {
           </div>
         </div>
       )}
+      <PdfViewerModal
+        isOpen={pdfViewer.isOpen}
+        fileUrl={pdfViewer.url}
+        fileName={pdfViewer.name}
+        onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
+      />
     </div>
   );
 }

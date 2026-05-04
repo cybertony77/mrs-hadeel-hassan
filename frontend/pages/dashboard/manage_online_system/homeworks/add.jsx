@@ -21,6 +21,13 @@ import {
   reindexQuestionErrorsAfterQuestionRemoved,
   reindexDragOverAfterQuestionRemoved,
 } from '../../../../lib/onlineItemQuestionFormHelpers';
+import DeadlineTimeRow from '../../../../components/DeadlineTimeRow';
+import {
+  getEgyptYmdToday,
+  isDeadlineStrictlyInFutureEgypt,
+  normalizeDeadlineTimeField,
+  parseDeadlineTime,
+} from '../../../../lib/deadlineTimeEgypt';
 
 
 export default function AddHomework() {
@@ -31,6 +38,7 @@ export default function AddHomework() {
     comment: '',
     deadline_type: 'no_deadline',
     deadline_date: '',
+    deadline_time: null,
     homework_type: 'questions',
     book_name: '',
     from_page: '',
@@ -624,11 +632,14 @@ export default function AddHomework() {
       if (!formData.deadline_date) {
         newErrors.deadline_date = '❌ Deadline date is required';
       } else {
-        const selectedDate = new Date(formData.deadline_date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate <= today) {
-          newErrors.deadline_date = '❌ Deadline date must be in the future';
+        const rawT = formData.deadline_time;
+        if (rawT != null && String(rawT).trim() !== '' && !parseDeadlineTime(String(rawT).trim())) {
+          newErrors.deadline_time = '❌ Invalid deadline time (use format like 04:30 AM)';
+        } else {
+          const normT = normalizeDeadlineTimeField('with_deadline', rawT);
+          if (!isDeadlineStrictlyInFutureEgypt(formData.deadline_date, normT)) {
+            newErrors.deadline_date = '❌ Deadline must be in the future (Egypt time)';
+          }
         }
       }
     }
@@ -697,6 +708,10 @@ export default function AddHomework() {
       lesson: lessonTrimmed,
       deadline_type: formData.deadline_type,
       deadline_date: formData.deadline_type === 'with_deadline' ? formData.deadline_date : null,
+      deadline_time:
+        formData.deadline_type === 'with_deadline'
+          ? normalizeDeadlineTimeField('with_deadline', formData.deadline_time)
+          : null,
       homework_type: formData.homework_type,
       timer: formData.homework_type === 'questions' && formData.timer_type === 'with_timer' ? parseInt(formData.timer) : null,
       shuffle_questions_and_answers: formData.homework_type === 'questions' ? formData.shuffle_questions_and_answers : false,
@@ -1315,7 +1330,7 @@ export default function AddHomework() {
                         name="deadline_type"
                         value="no_deadline"
                         checked={formData.deadline_type === 'no_deadline'}
-                        onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value, deadline_date: '' })}
+                        onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value, deadline_date: '', deadline_time: null })}
                         style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
                       />
                       <span style={{ fontWeight: '500' }}>No Deadline Date</span>
@@ -1343,8 +1358,14 @@ export default function AddHomework() {
                     <input
                       type="date"
                       value={formData.deadline_date}
-                      onChange={(e) => setFormData({ ...formData, deadline_date: e.target.value })}
-                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          deadline_date: e.target.value,
+                          deadline_time: e.target.value ? formData.deadline_time : null,
+                        })
+                      }
+                      min={getEgyptYmdToday()}
                       style={{
                         width: '100%',
                         padding: '12px 16px',
@@ -1371,6 +1392,13 @@ export default function AddHomework() {
                       <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
                         {errors.deadline_date}
                       </div>
+                    )}
+                    {formData.deadline_date && (
+                      <DeadlineTimeRow
+                        value={formData.deadline_time}
+                        onChange={(t) => setFormData((prev) => ({ ...prev, deadline_time: t }))}
+                        error={errors.deadline_time}
+                      />
                     )}
                   </div>
                 )}

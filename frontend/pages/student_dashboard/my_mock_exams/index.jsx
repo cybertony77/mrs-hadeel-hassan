@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import Title from '../../../components/Title';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../lib/axios';
@@ -8,10 +9,12 @@ import { useProfile } from '../../../lib/api/auth';
 import { useSystemConfig } from '../../../lib/api/system';
 import NeedHelp from '../../../components/NeedHelp';
 import MockExamPerformanceChart from '../../../components/MockExamPerformanceChart';
+const PdfViewerModal = dynamic(() => import('../../../components/PdfViewerModal'), { ssr: false });
 import MockExamSelect from '../../../components/MockExamSelect';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
+import { formatDeadlineCardLabel, isDeadlinePassedEgypt } from '../../../lib/deadlineTimeEgypt';
 
 // Input with Button Component (matching manage online system style)
 function InputWithButton(props) {
@@ -56,7 +59,14 @@ export default function MyMockExams() {
   const [completedMockExams, setCompletedMockExams] = useState(new Set());
   const [errorMessage, setErrorMessage] = useState('');
   const [onlineMockExams, setOnlineMockExams] = useState([]);
-  
+  const [pdfViewer, setPdfViewer] = useState({ isOpen: false, url: '', name: '' });
+  const [, setDeadlineClockTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setDeadlineClockTick((n) => n + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
+
   // Check for error message in URL query
   useEffect(() => {
     if (router.query.error) {
@@ -294,34 +304,6 @@ export default function MyMockExams() {
     return null;
   };
 
-  // Helper function to check if deadline has passed
-  const isDeadlinePassed = (deadlineDate) => {
-    if (!deadlineDate) return false;
-    
-    try {
-      // Parse date in local timezone to avoid timezone shift
-      let deadline;
-      if (typeof deadlineDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(deadlineDate)) {
-        // If it's a string in YYYY-MM-DD format, parse it in local timezone
-        const [year, month, day] = deadlineDate.split('-').map(Number);
-        deadline = new Date(year, month - 1, day);
-      } else if (deadlineDate instanceof Date) {
-        deadline = new Date(deadlineDate);
-      } else {
-        deadline = new Date(deadlineDate);
-      }
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      deadline.setHours(0, 0, 0, 0);
-      
-      return deadline <= today; // Deadline passed if deadline <= today
-    } catch (e) {
-      return false;
-    }
-  };
-
-
   if (isLoading) {
     return (
       <div style={{ 
@@ -539,21 +521,7 @@ export default function MyMockExams() {
                             <span>•</span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Image src="/clock.svg" alt="Deadline" width={18} height={18} />
-                              {mockExam.deadline_date ? (() => {
-                                try {
-                                  // Parse date in local timezone
-                                  let deadline;
-                                  if (typeof mockExam.deadline_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(mockExam.deadline_date)) {
-                                    const [year, month, day] = mockExam.deadline_date.split('-').map(Number);
-                                    deadline = new Date(year, month - 1, day);
-                                  } else {
-                                    deadline = new Date(mockExam.deadline_date);
-                                  }
-                                  return `With deadline date : ${deadline.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}`;
-                                } catch (e) {
-                                  return `With deadline date : ${mockExam.deadline_date}`;
-                                }
-                              })() : 'With no deadline date'}
+                              {formatDeadlineCardLabel(mockExam.deadline_date, mockExam.deadline_time)}
                             </span>
                           </>
                         )}
@@ -567,6 +535,19 @@ export default function MyMockExams() {
                         style={{ padding: '8px 16px', backgroundColor: '#32b750', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         <Image src="/pdf.svg" alt="PDF" width={18} height={18} style={{ display: 'inline-block' }} />
                         Download PDF
+                      </button>
+                    )}
+                    {mockExam.mock_exam_type === 'pdf' && mockExam.pdf_url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPdfViewer({ isOpen: true, url: mockExam.pdf_url, name: `${mockExam.pdf_file_name || 'file'}.pdf` });
+                        }}
+                        className="me-action-btn"
+                        style={{ padding: '8px 16px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <Image src="/external-link.svg" alt="Open PDF" width={18} height={18} style={{ display: 'inline-block' }} />
+                        Open PDF
                       </button>
                     )}
                     {mockExam.comment && (
@@ -636,7 +617,7 @@ export default function MyMockExams() {
                       // Check if deadline has passed and mock exam not submitted
                       if (mockExam.deadline_type === 'with_deadline' && 
                           mockExam.deadline_date && 
-                          isDeadlinePassed(mockExam.deadline_date)) {
+                          isDeadlinePassedEgypt(mockExam.deadline_date, mockExam.deadline_time)) {
                         return (
                           <button
                             style={{
@@ -796,6 +777,12 @@ export default function MyMockExams() {
           </div>
         </div>
       )}
+      <PdfViewerModal
+        isOpen={pdfViewer.isOpen}
+        fileUrl={pdfViewer.url}
+        fileName={pdfViewer.name}
+        onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
+      />
     </div>
   );
 }

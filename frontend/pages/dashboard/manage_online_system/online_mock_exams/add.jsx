@@ -21,7 +21,13 @@ import {
   reindexQuestionErrorsAfterQuestionRemoved,
   reindexDragOverAfterQuestionRemoved,
 } from '../../../../lib/onlineItemQuestionFormHelpers';
-
+import DeadlineTimeRow from '../../../../components/DeadlineTimeRow';
+import {
+  getEgyptYmdToday,
+  isDeadlineStrictlyInFutureEgypt,
+  normalizeDeadlineTimeField,
+  parseDeadlineTime,
+} from '../../../../lib/deadlineTimeEgypt';
 
 export default function AddMockExam() {
   const router = useRouter();
@@ -31,6 +37,7 @@ export default function AddMockExam() {
     comment: '',
     deadline_type: 'no_deadline',
     deadline_date: '',
+    deadline_time: null,
     mock_exam_type: 'questions',
     timer_type: 'no_timer',
     timer: null,
@@ -597,11 +604,14 @@ export default function AddMockExam() {
       if (!formData.deadline_date) {
         newErrors.deadline_date = '❌ Deadline date is required';
       } else {
-        const selectedDate = new Date(formData.deadline_date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate <= today) {
-          newErrors.deadline_date = '❌ Deadline date must be in the future';
+        const rawT = formData.deadline_time;
+        if (rawT != null && String(rawT).trim() !== '' && !parseDeadlineTime(String(rawT).trim())) {
+          newErrors.deadline_time = '❌ Invalid deadline time (use format like 04:30 AM)';
+        } else {
+          const normT = normalizeDeadlineTimeField('with_deadline', rawT);
+          if (!isDeadlineStrictlyInFutureEgypt(formData.deadline_date, normT)) {
+            newErrors.deadline_date = '❌ Deadline must be in the future (Egypt time)';
+          }
         }
       }
     }
@@ -666,6 +676,10 @@ export default function AddMockExam() {
       mock_exam_type: formData.mock_exam_type || 'questions',
       deadline_type: formData.deadline_type,
       deadline_date: formData.deadline_type === 'with_deadline' ? formData.deadline_date : null,
+      deadline_time:
+        formData.deadline_type === 'with_deadline'
+          ? normalizeDeadlineTimeField('with_deadline', formData.deadline_time)
+          : null,
       timer: formData.mock_exam_type === 'questions' && formData.timer_type === 'with_timer' ? parseInt(formData.timer) : null,
       shuffle_questions_and_answers: formData.mock_exam_type === 'questions' ? formData.shuffle_questions_and_answers : false,
       show_details_after_submitting: formData.mock_exam_type === 'questions' ? formData.show_details_after_submitting : false,
@@ -1015,7 +1029,7 @@ export default function AddMockExam() {
                         name="deadline_type"
                         value="no_deadline"
                         checked={formData.deadline_type === 'no_deadline'}
-                        onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value, deadline_date: '' })}
+                        onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value, deadline_date: '', deadline_time: null })}
                         style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
                       />
                       <span style={{ fontWeight: '500' }}>No Deadline Date</span>
@@ -1043,8 +1057,14 @@ export default function AddMockExam() {
                     <input
                       type="date"
                       value={formData.deadline_date}
-                      onChange={(e) => setFormData({ ...formData, deadline_date: e.target.value })}
-                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          deadline_date: e.target.value,
+                          deadline_time: e.target.value ? formData.deadline_time : null,
+                        })
+                      }
+                      min={getEgyptYmdToday()}
                       style={{
                         width: '100%',
                         padding: '12px 16px',
@@ -1071,6 +1091,13 @@ export default function AddMockExam() {
                       <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
                         {errors.deadline_date}
                       </div>
+                    )}
+                    {formData.deadline_date && (
+                      <DeadlineTimeRow
+                        value={formData.deadline_time}
+                        onChange={(t) => setFormData((prev) => ({ ...prev, deadline_time: t }))}
+                        error={errors.deadline_time}
+                      />
                     )}
                   </div>
                 )}

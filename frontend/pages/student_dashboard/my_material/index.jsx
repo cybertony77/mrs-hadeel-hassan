@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import Title from '../../../components/Title';
 import NeedHelp from '../../../components/NeedHelp';
+const PdfViewerModal = dynamic(() => import('../../../components/PdfViewerModal'), { ssr: false });
 import apiClient from '../../../lib/axios';
 import { useProfile } from '../../../lib/api/auth';
 import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
@@ -10,6 +12,7 @@ import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
 export default function MyMaterial() {
   const { data: profile } = useProfile();
   const [notePopup, setNotePopup] = useState(null);
+  const [pdfViewer, setPdfViewer] = useState({ isOpen: false, url: '', name: '' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['materials-student'],
@@ -78,6 +81,16 @@ export default function MyMaterial() {
                         Download PDF
                       </button>
                     )}
+                    {item.pdf_url && (
+                      <button
+                        onClick={() => setPdfViewer({ isOpen: true, url: item.pdf_url, name: `${item.pdf_file_name || 'file'}.pdf` })}
+                        className="hw-action-btn"
+                        style={{ padding: '8px 16px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Image src="/external-link.svg" alt="Open PDF" width={18} height={18} />
+                        Open PDF
+                      </button>
+                    )}
                     {item.comment && (
                       <button onClick={() => setNotePopup(item.comment)} className="hw-action-btn" style={{ padding: '8px 16px', backgroundColor: '#1FA8DC', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Image src="/notes4.svg" alt="Notes" width={18} height={18} />
@@ -107,6 +120,13 @@ export default function MyMaterial() {
           </div>
         </div>
       )}
+
+      <PdfViewerModal
+        isOpen={pdfViewer.isOpen}
+        fileUrl={pdfViewer.url}
+        fileName={pdfViewer.name}
+        onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
+      />
 
       <style jsx>{`
         .homework-item {
