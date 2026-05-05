@@ -72,6 +72,29 @@ function resolveMeetingDate(meeting) {
   );
 }
 
+function getMp4DownloadUrl(meeting) {
+  const files = Array.isArray(meeting?.recording_files) ? meeting.recording_files : [];
+  const mp4File = files.find((file) => {
+    const fileType = String(file?.file_type || '').toUpperCase();
+    const status = String(file?.status || '').toLowerCase();
+    return fileType === 'MP4' && (!status || status === 'completed');
+  });
+  return mp4File?.download_url || '';
+}
+
+function buildDirectZoomUrl(downloadUrl, accessToken) {
+  const raw = String(downloadUrl || '').trim();
+  const token = String(accessToken || '').trim();
+  if (!raw || !token) return '';
+  try {
+    const url = new URL(raw);
+    url.searchParams.set('access_token', token);
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -97,7 +120,10 @@ export default async function handler(req, res) {
     }
 
     const meetings = Array.isArray(payload?.meetings) ? payload.meetings : [];
-    const mapped = meetings.map((meeting) => ({
+    const accessToken = payload?._resolved_access_token || '';
+    const mapped = meetings.map((meeting) => {
+      const mp4DownloadUrl = getMp4DownloadUrl(meeting);
+      return ({
       ...(meeting || {}),
       uuid: meeting.uuid || '',
       id: meeting.id || null,
@@ -107,9 +133,12 @@ export default async function handler(req, res) {
       timezone: meeting.timezone || null,
       created_at: resolveMeetingDate(meeting),
       recording_files: Array.isArray(meeting.recording_files) ? meeting.recording_files : [],
+      zoom_mp4_download_url: mp4DownloadUrl,
+      zoom_direct_video_url: buildDirectZoomUrl(mp4DownloadUrl, accessToken),
       created_at_formated: formatDateTime(resolveMeetingDate(meeting), meeting.timezone),
       duration_furmated: formatDuration(meeting.duration),
-    }));
+      });
+    });
 
     return res.json({
       meetings: mapped,

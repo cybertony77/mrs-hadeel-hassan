@@ -38,6 +38,27 @@ cloudinary.config({
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ALLOWED_FOLDERS = ['HW-PDFs', 'Quizs-PDFs', 'MockExams-PDFs', 'material'];
+const CLOUDINARY_TIMEOUT_MS = 300000; // 5 minutes for slow networks/large payloads
+const MAX_RETRY_COUNT = 2;
+
+async function uploadPdfWithRetry(file, options) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= MAX_RETRY_COUNT; attempt += 1) {
+    try {
+      return await cloudinary.uploader.upload(file, options);
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.http_code || 0);
+      const transient = !status || status >= 500 || status === 420 || status === 429;
+      if (!transient || attempt === MAX_RETRY_COUNT) {
+        throw error;
+      }
+      const waitMs = 1000 * 2 ** attempt;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+  throw lastError;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -60,19 +81,24 @@ export default async function handler(req, res) {
     }
 
     const base64Data = file.includes(',') ? file.split(',')[1] : file;
-    const fileSize = Buffer.from(base64Data, 'base64').length;
+    let fileSize = 0;
+    try {
+      fileSize = Buffer.from(base64Data, 'base64').length;
+    } catch {
+      return res.status(400).json({ error: 'Invalid PDF payload encoding.' });
+    }
 
     if (fileSize > MAX_FILE_SIZE) {
       return res.status(400).json({ error: 'Max PDF file size is 20 MB.' });
     }
 
-    const uploadResult = await cloudinary.uploader.upload(file, {
+    const uploadResult = await uploadPdfWithRetry(file, {
       folder: folder,
       resource_type: 'raw',
       type: 'upload',
       overwrite: false,
-      invalidate: true,
-      timeout: 120000,
+      // No overwrite => invalidation is unnecessary and slows uploads.
+      timeout: CLOUDINARY_TIMEOUT_MS,
     });
 
     res.status(200).json({
@@ -98,7 +124,8 @@ export default async function handler(req, res) {
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '30mb',
+      // 20MB binary PDF may exceed 30MB once base64 + JSON overhead are added.
+      sizeLimit: '40mb',
     },
   },
 };

@@ -12,7 +12,10 @@ export default function ZoomVideoPlayer({
   const hasCompleteRef = useRef(false);
   const src = useMemo(() => {
     if (!meetingId) return '';
-    return `/api/videos/zoom/${encodeURIComponent(String(meetingId).trim())}`;
+    const value = String(meetingId).trim();
+    if (/^https?:\/\//i.test(value)) return value;
+    // Backward compatibility for old saved meeting IDs
+    return `/api/videos/zoom/${encodeURIComponent(value)}`;
   }, [meetingId]);
 
   const handleTimeUpdate = (event) => {

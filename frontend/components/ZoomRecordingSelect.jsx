@@ -44,7 +44,11 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
   };
 
   const showPagination = hasPrev || hasNext;
-  const selectedMeeting = meetings.find((meeting) => selectedValue === meeting.uuid);
+  const selectedMeeting = meetings.find(
+    (meeting) =>
+      selectedValue === meeting.zoom_direct_video_url ||
+      selectedValue === meeting.uuid
+  );
   const triggerLabel = selectedMeeting
     ? `Date : ${selectedMeeting.created_at_formated || '-'}, Duration : ${selectedMeeting.duration_furmated || '-'}`
     : 'Select Zoom recording';
@@ -162,12 +166,13 @@ export default function ZoomRecordingSelect({ selectedValue, onSelect }) {
                 </div>
               ) : (
                 meetings.map((meeting) => {
-                  const isSelected = selectedValue === meeting.uuid;
+                  const directUrl = meeting.zoom_direct_video_url || '';
+                  const isSelected = selectedValue === directUrl || selectedValue === meeting.uuid;
                   return (
                     <div
                       key={meeting.uuid || String(meeting.id)}
                       onClick={() => {
-                        onSelect(meeting.uuid);
+                        onSelect(directUrl || meeting.uuid || '');
                         setIsOpen(false);
                       }}
                       style={{

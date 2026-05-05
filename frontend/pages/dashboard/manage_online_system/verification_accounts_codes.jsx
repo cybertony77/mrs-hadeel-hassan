@@ -464,23 +464,15 @@ Best regards
       return;
     }
     
-    // Validate country code: if number starts with 012, 011, 010, or 015, allow without country code
-    // Otherwise, require country code (starts with 20 for Egypt)
-    const startsWithEgyptPrefix = phoneNumber.startsWith('012') || 
-                                   phoneNumber.startsWith('011') || 
-                                   phoneNumber.startsWith('010') || 
-                                   phoneNumber.startsWith('015');
-    
-    const hasCountryCode = phoneNumber.startsWith('20');
-    
-    if (!startsWithEgyptPrefix && !hasCountryCode) {
-      alert('Country code required. Please add country code (e.g., 20 for Egypt)');
-      return;
-    }
-    
-    // If number starts with 012/011/010/015, remove first 0 and prepend 20 (Egypt country code)
-    if (startsWithEgyptPrefix && !hasCountryCode) {
-      phoneNumber = '20' + phoneNumber.substring(1); // Remove first 0
+    // Auto-convert only local Egyptian mobile numbers; keep other international numbers as-is.
+    const startsWithEgyptLocalMobile =
+      phoneNumber.startsWith('010') ||
+      phoneNumber.startsWith('011') ||
+      phoneNumber.startsWith('012') ||
+      phoneNumber.startsWith('015');
+
+    if (startsWithEgyptLocalMobile) {
+      phoneNumber = `20${phoneNumber.substring(1)}`;
     }
     
     // Create WhatsApp URL
@@ -534,20 +526,14 @@ Best regards
       return;
     }
     
-    const startsWithEgyptPrefix = phoneNumber.startsWith('012') || 
-                                   phoneNumber.startsWith('011') || 
-                                   phoneNumber.startsWith('010') || 
-                                   phoneNumber.startsWith('015');
-    
-    const hasCountryCode = phoneNumber.startsWith('20');
-    
-    if (!startsWithEgyptPrefix && !hasCountryCode) {
-      alert('Country code required. Please add country code (e.g., 20 for Egypt)');
-      return;
-    }
-    
-    if (startsWithEgyptPrefix && !hasCountryCode) {
-      phoneNumber = '20' + phoneNumber.substring(1);
+    const startsWithEgyptLocalMobile =
+      phoneNumber.startsWith('010') ||
+      phoneNumber.startsWith('011') ||
+      phoneNumber.startsWith('012') ||
+      phoneNumber.startsWith('015');
+
+    if (startsWithEgyptLocalMobile) {
+      phoneNumber = `20${phoneNumber.substring(1)}`;
     }
     
     const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;

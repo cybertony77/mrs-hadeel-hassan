@@ -718,23 +718,15 @@ export default function GenerateLink() {
                           // Use phone number as stored in DB
                           let formattedPhone = selectedStudent.phone.replace(/[^0-9]/g, '');
                           
-                          // Validate country code: if number starts with 012, 011, 010, or 015, allow without country code
-                          // Otherwise, require country code (starts with 20 for Egypt)
-                          const startsWithEgyptPrefix = formattedPhone.startsWith('012') || 
-                                                         formattedPhone.startsWith('011') || 
-                                                         formattedPhone.startsWith('010') || 
-                                                         formattedPhone.startsWith('015');
-                          
-                          const hasCountryCode = formattedPhone.startsWith('20');
-                          
-                          if (!startsWithEgyptPrefix && !hasCountryCode) {
-                            alert('Country code required. Please add country code (e.g., 20 for Egypt)');
-                            return;
-                          }
-                          
-                          // If number starts with 012/011/010/015, remove first 0 and prepend 20 (Egypt country code)
-                          if (startsWithEgyptPrefix && !hasCountryCode) {
-                            formattedPhone = '20' + formattedPhone.substring(1); // Remove first 0
+                          // Auto-convert only local Egyptian mobile numbers; keep other international numbers as-is.
+                          const startsWithEgyptLocalMobile =
+                            formattedPhone.startsWith('010') ||
+                            formattedPhone.startsWith('011') ||
+                            formattedPhone.startsWith('012') ||
+                            formattedPhone.startsWith('015');
+
+                          if (startsWithEgyptLocalMobile) {
+                            formattedPhone = `20${formattedPhone.substring(1)}`;
                           }
                           
                           const message = `Follow up Message:
@@ -795,23 +787,15 @@ We wish you gets high scores 😊❤
                           // Use phone number as stored in DB
                           let phoneNumber = (selectedStudent.parents_phone || selectedStudent.parentsPhone || selectedStudent.parentsPhone1).replace(/[^0-9]/g, '');
                           
-                          // Validate country code: if number starts with 012, 011, 010, or 015, allow without country code
-                          // Otherwise, require country code (starts with 20 for Egypt)
-                          const startsWithEgyptPrefix = phoneNumber.startsWith('012') || 
-                                                         phoneNumber.startsWith('011') || 
-                                                         phoneNumber.startsWith('010') || 
-                                                         phoneNumber.startsWith('015');
-                          
-                          const hasCountryCode = phoneNumber.startsWith('20');
-                          
-                          if (!startsWithEgyptPrefix && !hasCountryCode) {
-                            alert('Country code required. Please add country code (e.g., 20 for Egypt)');
-                            return;
-                          }
-                          
-                          // If number starts with 012/011/010/015, remove first 0 and prepend 20 (Egypt country code)
-                          if (startsWithEgyptPrefix && !hasCountryCode) {
-                            phoneNumber = '20' + phoneNumber.substring(1); // Remove first 0
+                          // Auto-convert only local Egyptian mobile numbers; keep other international numbers as-is.
+                          const startsWithEgyptLocalMobile =
+                            phoneNumber.startsWith('010') ||
+                            phoneNumber.startsWith('011') ||
+                            phoneNumber.startsWith('012') ||
+                            phoneNumber.startsWith('015');
+
+                          if (startsWithEgyptLocalMobile) {
+                            phoneNumber = `20${phoneNumber.substring(1)}`;
                           }
                           
                           const formattedPhone = phoneNumber;

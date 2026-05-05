@@ -193,5 +193,8 @@ export async function listZoomUserRecordings(nextPageToken = '', forceRefresh = 
     throw err;
   }
 
-  return payload;
+  return {
+    ...payload,
+    _resolved_access_token: token,
+  };
 }

@@ -29,26 +29,15 @@ const WhatsAppButton = ({ student, onMessageSent, onScoreUpdate }) => {
         return;
       }
       
-      // Validate country code: if number starts with 012, 011, 010, or 015, allow without country code
-      // Otherwise, require country code (starts with 20 for Egypt)
-      const startsWithEgyptPrefix = parentNumber.startsWith('012') || 
-                                     parentNumber.startsWith('011') || 
-                                     parentNumber.startsWith('010') || 
-                                     parentNumber.startsWith('015');
-      
-      const hasCountryCode = parentNumber.startsWith('20');
-      
-      if (!startsWithEgyptPrefix && !hasCountryCode) {
-        setMessage('Country code required. Please add country code (e.g., 20 for Egypt)');
-        setTimeout(() => setMessage(''), 3000);
-        const lessonName = student.attendanceLesson || student.currentLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
-        updateMessageStateMutation.mutate({ id: student.id, message_state: false, lesson: lessonName });
-        return;
-      }
-      
-      // If number starts with 012/011/010/015, remove first 0 and prepend 20 (Egypt country code)
-      if (startsWithEgyptPrefix && !hasCountryCode) {
-        parentNumber = '20' + parentNumber.substring(1); // Remove first 0
+      // Auto-convert only local Egyptian mobile numbers; keep other international numbers as-is.
+      const startsWithEgyptLocalMobile =
+        parentNumber.startsWith('010') ||
+        parentNumber.startsWith('011') ||
+        parentNumber.startsWith('012') ||
+        parentNumber.startsWith('015');
+
+      if (startsWithEgyptLocalMobile) {
+        parentNumber = `20${parentNumber.substring(1)}`;
       }
 
       // Validate student data
